@@ -1,24 +1,28 @@
 # Cafe Dünyam
 
-Flutter Android uygulaması ve tarayıcıda çalışan yerel yönetim paneli.
+Flutter tabanlı Android ve iOS uygulaması.
 
 - `mobil/`: müşteri ve işletme akışları olan Flutter uygulaması.
-- `yonetim/index.html`: tarayıcı içinde çalışan örnek kafe/kampanya paneli.
-- `.github/workflows/android-apk.yml`: Android APK derleme iş akışı.
+- `yonetim/index.html`: tarayıcı içinde çalışan yerel örnek yönetim paneli.
+- `.github/workflows/android-apk.yml`: Android APK derlemesi.
+- `.github/workflows/cross-platform.yml`: Android analiz/test/APK ve iOS simülatör derlemesi.
+- `supabase/schema.sql`: Supabase veritabanı tabloları ve başlangıç RLS politikaları.
+- `SUPABASE_SETUP.md`: bulut kurulumu ve güvenlik notları.
 
-## Bu sürümde uygulamadaki yerel akışlar
+## Mevcut uygulama durumu
 
-- Müşteri ve işletme rolüyle hesap oluşturma, giriş ve çıkış.
-- Müşteri ana sayfası, kafe arama/şehir filtresi, kafe detayları, sadakat kartı görünümü, kampanya kaydetme ve profil.
-- İşletme paneli, yerel kampanya taslağı oluşturma, kampanyayı aktif/pasif yapma ve silme.
-- Kafe/kampanya listeleri, profil ve oturum bilgileri cihazdaki SharedPreferences içinde tutulur.
+Uygulamada müşteri/işletme kayıt ekranları, kafe keşfi, kampanyalar, yerel sadakat kartları ve işletme/yönetim ekranları bulunur. NFC eklentisi projede tutulmuştur.
 
-## Önemli sınırlar
+**Önemli:** Mevcut mobil ekranların veri katmanı halen cihazdaki SharedPreferences'a dayanır. Bu nedenle hesaplar, damgalar ve kampanyalar cihazlar arasında henüz otomatik senkronize olmaz. Supabase şeması ve kurulum dokümanı eklendi; mevcut ekranların Supabase Auth ve bulut tablolarına bağlanması, RLS testleri ve gerçek cihaz testleri tamamlanmadan uygulama üretim/yayın için hazır sayılmaz.
 
-Bu bir **yerel prototiptir**, yayın için hazır üretim sistemi değildir. Hesaplar ve veriler yalnızca aynı cihazda saklanır; başka telefonla, tarayıcı paneliyle veya başka kullanıcıyla senkronize olmaz. Yerel parola saklama yöntemi gerçek kullanıcı hesapları için güvenli değildir; gerçek sürümden önce sunucu tabanlı kimlik doğrulama gerekir.
+## Supabase kurulumu
 
-İşletme hesabı/şube sahipliği doğrulaması, güvenli yetkilendirme, gerçek alışverişi doğrulayan sunucu işlemi, sahteciliğe dayanıklı damga verme, kampanyaların cihazlar arası dağıtımı ve gerçek müşteri-işletme bağlantısı bu sürümde yoktur. Sadakat kartı ekranı yalnızca yerel örnek durumu gösterir; gerçek alışverişe karşılık damga verildiğini garanti etmez. Örnek kafe ve kampanya verileri gerçek işletme ortaklığı anlamına gelmez.
+`SUPABASE_SETUP.md` dosyasını izleyerek bir Supabase projesi oluştur, `supabase/schema.sql` dosyasını SQL Editor'de çalıştır ve proje URL'si ile public anon/publishable key'i derleme yapılandırmasına ekle. **service_role key'i mobil uygulamaya koyma.**
 
-## APK oluşturma
+## Android APK
 
-GitHub deposunda **Actions → Cafe Dunyam Android APK** bölümünden derleme çalıştırmasını açın. Başarılı iş akışının Artifacts bölümünde `cafe-dunyam-android-apk` dosyası görünür. Derleme sonucu doğrulanmadan APK'nın başarıyla üretildiği varsayılmamalıdır.
+GitHub deposunda **Actions → Cafe Dunyam Android APK** iş akışını çalıştır. Başarılı çalıştırmanın Artifacts bölümünde `cafe-dunyam-android-apk` görünür. Derleme sonucu doğrulanmadan APK'nın üretildiği varsayılmamalıdır.
+
+## Platform kontrolleri
+
+**Actions → Cafe Dunyam Cross-platform Checks** Android tarafında analiz, test ve release APK derlemesi; iOS tarafında analiz, test ve imzasız simülatör derlemesi çalıştırır. iOS simülatör derlemesi, imzalı gerçek cihaz uygulaması veya App Store yayını anlamına gelmez.
