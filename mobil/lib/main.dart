@@ -223,7 +223,7 @@ class CafePreviewList extends StatelessWidget {
  if(!s.hasData)return const Center(child:CircularProgressIndicator());
  final items=limit==null?s.data!:s.data!.take(limit!).toList();
  if(items.isEmpty)return const Text('Henüz kafe eklenmedi.');
- return Column(children:items.map((c)=>Card(child:ListTile(leading:const CircleAvatar(backgroundColor:cream,child:Icon(Icons.local_cafe,color:forest)),title:Text('${c['name']}',style:const TextStyle(fontWeight:FontWeight.bold)),subtitle:Text('${c['city']} • ${c['type']}'),trailing:const Icon(Icons.chevron_right),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>CafeDetailPage(cafe:c))))).toList());
+ return Column(children:items.map((c)=>Card(child:ListTile(leading:const CircleAvatar(backgroundColor:cream,child:Icon(Icons.local_cafe,color:forest)),title:Text('${c['name']}',style:const TextStyle(fontWeight:FontWeight.bold)),subtitle:Text('${c['city']} • ${c['type']}'),trailing:const Icon(Icons.chevron_right),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>CafeDetailPage(cafe:c)))))).toList());
  });
 }
 
@@ -279,7 +279,7 @@ class _CustomerCardsState extends State<CustomerCards>{
 class DealPreviewList extends StatelessWidget{const DealPreviewList({super.key});@override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(dealsKey,starterDeals),builder:(context,s){
  if(!s.hasData)return const Center(child:CircularProgressIndicator());
  final deals=s.data!.where((d)=>d['active']==true).toList();
- return Column(children:deals.take(3).map((d)=>Card(child:ListTile(leading:const CircleAvatar(backgroundColor:cream,child:Icon(Icons.local_offer,color:forest)),title:Text('${d['title']}'),subtitle:Text('${d['benefit']} • ${d['audience']}'))).toList());
+ return Column(children:deals.take(3).map((d)=>Card(child:ListTile(leading:const CircleAvatar(backgroundColor:cream,child:Icon(Icons.local_offer,color:forest)),title:Text('${d['title']}'),subtitle:Text('${d['benefit']} • ${d['audience']}')))).toList());
 });}
 
 class CustomerDeals extends StatefulWidget{const CustomerDeals({super.key});@override State<CustomerDeals> createState()=>_CustomerDealsState();}
@@ -352,7 +352,7 @@ class _BusinessDealsState extends State<BusinessDeals>{
  const SizedBox(height:10),DropdownButtonFormField<String>(value:audience,decoration:const InputDecoration(labelText:'Hedef kitle'),items:const[DropdownMenuItem(value:'Herkes',child:Text('Herkes')),DropdownMenuItem(value:'Öğrenci',child:Text('Öğrenci')),DropdownMenuItem(value:'Yeni müşteriler',child:Text('Yeni müşteriler'))],onChanged:(v)=>setState(()=>audience=v??'Herkes')),
  const SizedBox(height:12),FilledButton.icon(onPressed:busy?null:_add,icon:const Icon(Icons.add),label:Text(busy?'Kaydediliyor…':'Kampanya taslağı oluştur')),
  const SizedBox(height:16),const Text('Kayıtlı kampanyalar',style:TextStyle(fontWeight:FontWeight.bold,fontSize:19)),
- FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(dealsKey,starterDeals),builder:(context,s){if(!s.hasData)return const Center(child:CircularProgressIndicator());return Column(children:s.data!.map((d)=>Card(child:ListTile(title:Text('${d['title']}'),subtitle:Text('${d['benefit']}\nDurum: ${d['active']==true?'Aktif (yerel)':'Pasif'}'),isThreeLine:true,trailing:PopupMenuButton<String>(onSelected:(v)=>v=='toggle'?_toggle(d):_delete('${d['id']}'),itemBuilder:(_)=>const[PopupMenuItem(value:'toggle',child:Text('Aktif / pasif değiştir')),PopupMenuItem(value:'delete',child:Text('Sil'))]))).toList());}),
+ FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(dealsKey,starterDeals),builder:(context,s){if(!s.hasData)return const Center(child:CircularProgressIndicator());return Column(children:s.data!.map((d)=>Card(child:ListTile(title:Text('${d['title']}'),subtitle:Text('${d['benefit']}\nDurum: ${d['active']==true?'Aktif (yerel)':'Pasif'}'),isThreeLine:true,trailing:PopupMenuButton<String>(onSelected:(v)=>v=='toggle'?_toggle(d):_delete('${d['id']}'),itemBuilder:(_)=>const[PopupMenuItem(value:'toggle',child:Text('Aktif / pasif değiştir')),PopupMenuItem(value:'delete',child:Text('Sil'))])))).toList());}),
  const LocalModeNote(),
  ]);
 }
