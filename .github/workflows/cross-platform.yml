@@ -59,8 +59,8 @@ jobs:
               raise SystemExit('nfc_manager Android build.gradle not found')
           for p in files:
               s = p.read_text()
-              updated = re.sub(r'compileSdkVersion\\s+\\d+', 'compileSdkVersion 35', s)
-              updated = re.sub(r'compileSdk\\s*=\\s*\\d+', 'compileSdk = 35', updated)
+              updated = re.sub(r'compileSdkVersion\s+\d+', 'compileSdkVersion 35', s)
+              updated = re.sub(r'compileSdk\s*=\s*\d+', 'compileSdk = 35', updated)
               if updated == s and 'compileSdkVersion 35' not in s and 'compileSdk = 35' not in s:
                   raise SystemExit(f'Could not patch compileSdk automatically: {p}')
               p.write_text(updated)
