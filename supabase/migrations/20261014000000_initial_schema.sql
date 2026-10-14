@@ -109,6 +109,20 @@ as $function$
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin' and approval_status = 'approved');
 $function$;
 
+create or replace function public.admin_delete_user(target_id uuid)
+returns void language plpgsql security definer set search_path = ''
+as $function$
+begin
+  if target_id = auth.uid() or not public.is_cafe_admin() then
+    raise exception 'Not authorized to delete this account';
+  end if;
+  delete from public.cafes where owner_id = target_id;
+  delete from auth.users where id = target_id;
+end;
+$function$;
+revoke all on function public.admin_delete_user(uuid) from public;
+grant execute on function public.admin_delete_user(uuid) to authenticated;
+
 drop policy if exists "profiles_read_self" on public.profiles;
 drop policy if exists "profiles_read_admin" on public.profiles;
 drop policy if exists "profiles_admin_update" on public.profiles;
