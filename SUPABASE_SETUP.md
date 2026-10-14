@@ -1,6 +1,6 @@
 # Cafe Dünyam — bulut kurulumu
 
-Uygulama şu anda yerel prototip davranışına sahip. Android ve iOS uygulamalarının aynı hesap ve verileri paylaşması için Supabase projesi gerekir; yalnızca APK derlemek senkronizasyon sağlamaz.
+Flutter uygulamasında Supabase Auth ve bulut veri erişimi eklendi. Kafeler, kampanyalar, işletme başvuruları, NFC siparişleri ve müşteri sadakat bakiyeleri için aşağıdaki SQL şemasının projeye uygulanmış olması gerekir. Şema uygulanmadan bulut özellikleri çalışmaz.
 
 ## 1. Supabase projesi
 1. Supabase üzerinde yeni bir proje oluştur.
@@ -8,7 +8,17 @@ Uygulama şu anda yerel prototip davranışına sahip. Android ve iOS uygulamala
 3. Project Settings → API bölümünden Project URL ve publishable/anon client key değerlerini al.
 4. Bu değerleri istemci yapılandırması olarak kullan. **service_role key'i mobil uygulamaya veya depoya koyma.**
 
-## 2. Flutter yapılandırması
+## 2. Yönetici hesabını hazırlama
+1. Uygulamada yönetici olarak kullanacağın e-posta ile normal bir hesap oluştur.
+2. Supabase SQL Editor'de aşağıdaki sorguda e-posta adresini kendi yönetici hesabınla değiştirip çalıştır:
+```sql
+update public.profiles
+set role = 'admin', approval_status = 'approved'
+where email = 'yonetici@ornek.com';
+```
+3. Uygulamada bu e-posta ve şifreyle giriş yap. `admin@cafedunyam.local` / `CafeAdmin123!` yalnızca cihaz içi demo hesabıdır; bulut yönetim hesabı değildir.
+
+## 3. Flutter yapılandırması
 Derleme sırasında aşağıdaki dart-define değerlerini kullan:
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
@@ -32,11 +42,11 @@ Bu depo Supabase CLI yapısına hazırlandı: `supabase/config.toml` ve `supabas
 
 GitHub yetkilendirmesi, Supabase projesi oluşturma ve hesap onayı kullanıcı hesabında yapılmalıdır; bunları senin adına dışarıdan tamamlayamam. Bu işlem için GitHub şifreni veya Supabase gizli anahtarlarını bana gönderme. Mobil uygulamaya yalnızca Project URL ve publishable/anon anahtarı girilir; `service_role` anahtarı kesinlikle paylaşılmaz.
 
-## 3. Yayına çıkmadan önce
-- Supabase kimlik doğrulaması ve profil/kafe/kampanya verilerinin uygulama katmanına bağlandığını doğrula.
+## 4. Yayına çıkmadan önce
+- SQL şemasının gerçekten uygulandığını ve yeni bir müşteri/işletme hesabıyla tabloların oluştuğunu doğrula.
 - Gerçek satın alma doğrulaması olmadan sadakat damgası üretme; doğrudan istemci yazma izni verme.
 - Admin işlemlerini yalnızca güvenilir sunucu tarafı yönetim aracıyla yap.
 - Android gerçek cihaz, iOS gerçek cihaz, çevrimdışı durum, hesap kurtarma ve RLS testlerini tamamla.
 - iOS için Apple imzalama ve App Store Connect erişimi gerekir.
 
-Bu şema güvenli başlangıç politikaları sağlar; tek başına mevcut yerel ekranları buluta bağlamaz. Uygulama kodundaki yerel veri erişimleri Supabase servisine geçirilmeden cihazlar arası senkronizasyon etkinleşmiş sayılmaz.
+Uygulama kodu bulut veri erişimini kullanır; ancak veritabanı şeması Supabase projesinde çalıştırılmadan ve gerçek Android/iOS cihazlarda uçtan uca test edilmeden sistemin tamamen hazır olduğu söylenemez. NFC damgası verme bilerek istemciye açılmamıştır; gerçek satın alma doğrulaması yapan güvenilir bir sunucu/Edge Function eklenmelidir.
