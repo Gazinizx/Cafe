@@ -121,16 +121,16 @@ create policy "cafes_owner_update" on public.cafes for update to authenticated u
 create policy "cafes_admin_update" on public.cafes for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
 create policy "cafes_admin_read" on public.cafes for select to authenticated using (public.is_cafe_admin());
 create policy "campaigns_read_active" on public.campaigns for select to anon, authenticated using (
-  is_active = true or exists (select 1 from public.cafes c where c.id = cafe_id and c.owner_id = auth.uid())
+  is_active = true or exists (select 1 from public.cafes c where c.id = cafe_id and c.owner_id = auth.uid()) or public.is_cafe_admin()
 );
 create policy "campaigns_owner_insert" on public.campaigns for insert to authenticated with check (
   exists (select 1 from public.cafes c join public.profiles p on p.id = c.owner_id
     where c.id = cafe_id and c.owner_id = auth.uid() and p.approval_status = 'approved')
 );
 create policy "campaigns_owner_update" on public.campaigns for update to authenticated using (
-  exists (select 1 from public.cafes c where c.id = cafe_id and c.owner_id = auth.uid())
+  exists (select 1 from public.cafes c join public.profiles p on p.id = c.owner_id where c.id = cafe_id and c.owner_id = auth.uid() and p.approval_status = 'approved')
 ) with check (
-  exists (select 1 from public.cafes c where c.id = cafe_id and c.owner_id = auth.uid())
+  exists (select 1 from public.cafes c join public.profiles p on p.id = c.owner_id where c.id = cafe_id and c.owner_id = auth.uid() and p.approval_status = 'approved')
 );
 create policy "campaigns_admin_update" on public.campaigns for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
 create policy "campaigns_admin_delete" on public.campaigns for delete to authenticated using (public.is_cafe_admin());
@@ -150,7 +150,6 @@ create policy "applications_read_owner" on public.business_applications for sele
 create policy "applications_insert_owner" on public.business_applications for insert to authenticated with check (
   business_id = auth.uid() and exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'business')
 );
-create policy "applications_owner_update" on public.business_applications for update to authenticated using (business_id = auth.uid()) with check (business_id = auth.uid());
 create policy "applications_admin_update" on public.business_applications for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
 
 -- Create a profile after signup. Role comes from user metadata but admin is never allowed from client metadata.
