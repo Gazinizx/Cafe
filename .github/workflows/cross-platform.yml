@@ -1,0 +1,107 @@
+name: Cafe Dunyam Cross-platform Checks
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate Android platform files
+        working-directory: mobil
+        run: flutter create --platforms=android --project-name cafe_dunyam .
+      - name: Generate launcher icon
+        working-directory: mobil
+        run: |
+          python3 -m pip install --user cairosvg
+          python3 - <<'PY'
+          import cairosvg
+          cairosvg.svg2png(url="assets/cafe_icon.svg", write_to="assets/app_icon.png", output_width=512, output_height=512)
+          PY
+      - name: Ensure NFC permission
+        working-directory: mobil
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          if "android.permission.NFC" not in s:
+              s = s.replace("<application", '    <uses-permission android:name="android.permission.NFC" />\n    <application', 1)
+              p.write_text(s)
+          PY
+      - name: Install dependencies
+        working-directory: mobil
+        run: flutter pub get
+      - name: Adjust NFC plugin compile SDK
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          files = list(Path.home().glob('.pub-cache/hosted/pub.dev/nfc_manager-*/android/build.gradle'))
+          if not files:
+              raise SystemExit('nfc_manager Android build.gradle not found')
+          for p in files:
+              s = p.read_text()
+              updated = re.sub(r'compileSdkVersion\\s+\\d+', 'compileSdkVersion 35', s)
+              updated = re.sub(r'compileSdk\\s*=\\s*\\d+', 'compileSdk = 35', updated)
+              if updated == s and 'compileSdkVersion 35' not in s and 'compileSdk = 35' not in s:
+                  raise SystemExit(f'Could not patch compileSdk automatically: {p}')
+              p.write_text(updated)
+          PY
+      - name: Analyze
+        working-directory: mobil
+        run: flutter analyze
+      - name: Test
+        working-directory: mobil
+        run: flutter test
+      - name: Build release APK
+        working-directory: mobil
+        run: flutter build apk --release
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cafe-dunyam-android-apk
+          path: mobil/build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios-simulator:
+    runs-on: macos-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Generate iOS platform files
+        working-directory: mobil
+        run: flutter create --platforms=ios --project-name cafe_dunyam .
+      - name: Install dependencies
+        working-directory: mobil
+        run: flutter pub get
+      - name: Analyze
+        working-directory: mobil
+        run: flutter analyze
+      - name: Test
+        working-directory: mobil
+        run: flutter test
+      - name: Build iOS simulator app
+        working-directory: mobil
+        run: flutter build ios --simulator --no-codesign
