@@ -101,6 +101,32 @@ as $function$
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin' and approval_status = 'approved');
 $function$;
 
+drop policy if exists "profiles_read_self" on public.profiles;
+drop policy if exists "profiles_read_admin" on public.profiles;
+drop policy if exists "profiles_admin_update" on public.profiles;
+drop policy if exists "profiles_insert_self" on public.profiles;
+drop policy if exists "profiles_update_self_limited" on public.profiles;
+drop policy if exists "cafes_read_active" on public.cafes;
+drop policy if exists "cafes_owner_insert" on public.cafes;
+drop policy if exists "cafes_owner_update" on public.cafes;
+drop policy if exists "cafes_admin_update" on public.cafes;
+drop policy if exists "cafes_admin_read" on public.cafes;
+drop policy if exists "campaigns_read_active" on public.campaigns;
+drop policy if exists "campaigns_owner_insert" on public.campaigns;
+drop policy if exists "campaigns_owner_update" on public.campaigns;
+drop policy if exists "campaigns_admin_update" on public.campaigns;
+drop policy if exists "campaigns_admin_delete" on public.campaigns;
+drop policy if exists "campaigns_owner_delete" on public.campaigns;
+drop policy if exists "memberships_read_self" on public.cafe_memberships;
+drop policy if exists "stamp_events_read_participant" on public.stamp_events;
+drop policy if exists "orders_read_owner" on public.business_orders;
+drop policy if exists "orders_read_admin" on public.business_orders;
+drop policy if exists "orders_insert_owner" on public.business_orders;
+drop policy if exists "orders_admin_update" on public.business_orders;
+drop policy if exists "applications_read_owner" on public.business_applications;
+drop policy if exists "applications_insert_owner" on public.business_applications;
+drop policy if exists "applications_admin_update" on public.business_applications;
+
 create policy "profiles_read_self" on public.profiles for select to authenticated using (id = auth.uid());
 create policy "profiles_read_admin" on public.profiles for select to authenticated using (public.is_cafe_admin());
 create policy "profiles_admin_update" on public.profiles for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
