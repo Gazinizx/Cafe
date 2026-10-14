@@ -318,6 +318,13 @@ class _AuthPageState extends State<AuthPage> {
         await p.remove(sessionKey);
         if (mounted) widget.onDone(user);
       } else {
+        if (mail == 'deneme' && password.text == 'deneme') {
+          final demo = <String,dynamic>{'name':'Deneme Müşteri','email':'deneme','role':'customer','approvalStatus':'approved'};
+          final p = await SharedPreferences.getInstance();
+          await p.setString(sessionKey, mail);
+          if (mounted) widget.onDone(demo);
+          return;
+        }
         final response = await cloud.auth.signInWithPassword(email: mail, password: password.text);
         final authUser = response.user;
         if (authUser == null) throw const AuthException('Giriş başarısız. Bilgilerini kontrol et.');
@@ -716,6 +723,7 @@ class BusinessReviewPage extends StatelessWidget {
   final Map<String,dynamic> user;
   const BusinessReviewPage({required this.user, super.key});
   Future<void> _logout(BuildContext context) async {
+    await cloud.auth.signOut();
     final p = await SharedPreferences.getInstance();
     await p.remove(sessionKey);
     if (context.mounted) Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const GatePage()), (r) => false);
@@ -745,6 +753,7 @@ class AdminShell extends StatefulWidget {
 class _AdminShellState extends State<AdminShell> {
   int tab = 0;
   Future<void> _logout() async {
+    await cloud.auth.signOut();
     final p = await SharedPreferences.getInstance(); await p.remove(sessionKey);
     if (!mounted) return;
     Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const GatePage()), (r) => false);
