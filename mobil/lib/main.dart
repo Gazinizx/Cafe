@@ -129,6 +129,7 @@ class _AuthPageState extends State<AuthPage> {
   final taxOffice = TextEditingController(), taxNumber = TextEditingController();
   final province = TextEditingController(), district = TextEditingController(), address = TextEditingController();
   final deliveryName = TextEditingController(), deliveryPhone = TextEditingController();
+  final deliveryProvince = TextEditingController(), deliveryDistrict = TextEditingController(), deliveryAddress = TextEditingController();
   String role = 'customer';
   int tagCount = 10;
   bool busy = false, hide = true;
@@ -141,6 +142,7 @@ class _AuthPageState extends State<AuthPage> {
     name.dispose(); email.dispose(); password.dispose(); cafeName.dispose(); phone.dispose();
     businessType.dispose(); taxOffice.dispose(); taxNumber.dispose(); province.dispose();
     district.dispose(); address.dispose(); deliveryName.dispose(); deliveryPhone.dispose();
+    deliveryProvince.dispose(); deliveryDistrict.dispose(); deliveryAddress.dispose();
     super.dispose();
   }
   String? requiredText(String? value, String label) => value == null || value.trim().isEmpty ? '$label alanını doldur.' : null;
@@ -164,7 +166,7 @@ class _AuthPageState extends State<AuthPage> {
         'paymentMethod': 'IBAN havale/EFT', 'paymentStatus': 'Ödeme bekleniyor',
         'orderStatus': 'Yerel taslak — gönderim yapılmadı',
         'recipientName': deliveryName.text.trim(), 'recipientPhone': deliveryPhone.text.trim(),
-        'province': province.text.trim(), 'district': district.text.trim(), 'address': address.text.trim(),
+        'province': deliveryProvince.text.trim(), 'district': deliveryDistrict.text.trim(), 'address': deliveryAddress.text.trim(),
         'createdAt': DateTime.now().toIso8601String(),
       } : null;
       final user = <String,dynamic>{
@@ -175,7 +177,9 @@ class _AuthPageState extends State<AuthPage> {
           'taxOffice': taxOffice.text.trim(), 'taxNumber': taxNumber.text.trim(),
           'province': province.text.trim(), 'district': district.text.trim(),
           'businessAddress': address.text.trim(), 'deliveryName': deliveryName.text.trim(),
-          'deliveryPhone': deliveryPhone.text.trim(), 'tagCount': tagCount, 'nfcOrder': order,
+          'deliveryPhone': deliveryPhone.text.trim(), 'deliveryProvince': deliveryProvince.text.trim(),
+          'deliveryDistrict': deliveryDistrict.text.trim(), 'deliveryAddress': deliveryAddress.text.trim(),
+          'tagCount': tagCount, 'nfcOrder': order,
         },
       };
       users.add(user);
@@ -230,7 +234,7 @@ class _AuthPageState extends State<AuthPage> {
           const SizedBox(height: 12),
           TextFormField(controller: district, decoration: const InputDecoration(labelText: 'İlçe'), validator: (v) => requiredText(v, 'İlçe')),
           const SizedBox(height: 12),
-          TextFormField(controller: address, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'İşletme / teslimat açık adresi'), validator: (v) => requiredText(v, 'Açık adres')),
+          TextFormField(controller: address, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'İşletmenin açık adresi'), validator: (v) => requiredText(v, 'İşletme adresi')),
           sectionTitle('NFC tag siparişi'),
           const Text('Bunlar test fiyatlarıdır, gerçek satış fiyatı değildir. Kargo bedeli de örnektir.'),
           const SizedBox(height: 10),
@@ -255,6 +259,12 @@ class _AuthPageState extends State<AuthPage> {
           TextFormField(controller: deliveryName, decoration: const InputDecoration(labelText: 'Teslim alacak kişinin adı soyadı'), validator: (v) => requiredText(v, 'Teslim alacak kişi')),
           const SizedBox(height: 12),
           TextFormField(controller: deliveryPhone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Teslimat telefonu'), validator: (v) => requiredText(v, 'Teslimat telefonu')),
+          const SizedBox(height: 12),
+          TextFormField(controller: deliveryProvince, decoration: const InputDecoration(labelText: 'Teslimat ili'), validator: (v) => requiredText(v, 'Teslimat ili')),
+          const SizedBox(height: 12),
+          TextFormField(controller: deliveryDistrict, decoration: const InputDecoration(labelText: 'Teslimat ilçesi'), validator: (v) => requiredText(v, 'Teslimat ilçesi')),
+          const SizedBox(height: 12),
+          TextFormField(controller: deliveryAddress, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Teslimat açık adresi'), validator: (v) => requiredText(v, 'Teslimat adresi')),
           sectionTitle('IBAN ile ödeme — demo'),
           Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFFFFE8C2), borderRadius: BorderRadius.circular(14)), child: const Text('ÖRNEK BİLGİLER — GERÇEK ÖDEME YAPMA. IBAN ve hesap sahibi temsili yer tutuculardır; gerçek hesap bilgisi henüz girilmedi. Havale/EFT ve ödeme onayı otomatik çalışmaz.')),
           const SizedBox(height: 10),
@@ -444,6 +454,15 @@ class BusinessDashboard extends StatelessWidget{
  Container(padding:const EdgeInsets.all(20),decoration:BoxDecoration(color:forest,borderRadius:BorderRadius.circular(22)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
  const Icon(Icons.storefront,color:cream,size:35),const SizedBox(height:12),Text('${user['cafeName']}',style:const TextStyle(color:Colors.white,fontSize:25,fontWeight:FontWeight.w900)),Text('${user['city']}',style:const TextStyle(color:Colors.white70)),const SizedBox(height:12),const Text('İşletme profili yerel taslaktır; doğrulanmış işletme hesabı değildir.',style:TextStyle(color:Colors.white70)),
  ])),
+ Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+ const Text('NFC tag sipariş özeti',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:forest)),
+ const SizedBox(height:8),
+ Text('Talep: ${user['tagCount'] ?? 0} adet NFC tag'),
+ Text('Paket: ${(user['nfcOrder'] as Map?)?['packagePriceTry'] ?? 0} TL • Kargo: ${(user['nfcOrder'] as Map?)?['shippingTry'] ?? 0} TL'),
+ Text('Örnek toplam: ${(user['nfcOrder'] as Map?)?['totalTry'] ?? 0} TL'),
+ const SizedBox(height:6), const Text('Durum: Yerel taslak / ödeme bekleniyor',style:TextStyle(fontWeight:FontWeight.bold)),
+ const Text('Bu sipariş bize gönderilmedi; IBAN ve fiyatlar demo amaçlıdır.',style:TextStyle(fontSize:12)),
+]))),
  const SizedBox(height:16),const Text('Yönetim araçları',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:forest)),
  const Card(child:ListTile(leading:Icon(Icons.campaign,color:forest),title:Text('Kampanya yönetimi'),subtitle:Text('Kampanya oluştur, düzenle ve yayından kaldır.'))),
  const Card(child:ListTile(leading:Icon(Icons.loyalty,color:forest),title:Text('Sadakat programı'),subtitle:Text('Kart ve ödül yapısı sonraki doğrulama adımına hazır taslak olarak ele alınır.'))),
@@ -474,6 +493,8 @@ class BusinessSettings extends StatelessWidget{
  const Heading('İşletmem','İşletme bilgileri ve yerel ayarlar.'),
  Card(child:ListTile(leading:const Icon(Icons.store,color:forest),title:Text('${user['cafeName']}'),subtitle:Text('${user['city']}'))),
  Card(child:ListTile(leading:const Icon(Icons.email,color:forest),title:Text('${user['email']}'),subtitle:const Text('Hesap e-postası'))),
+  Card(child:ListTile(leading:const Icon(Icons.phone,color:forest),title:Text('${user['phone'] ?? 'Telefon girilmedi'}'),subtitle:const Text('İşletme telefonu'))),
+  Card(child:ListTile(leading:const Icon(Icons.location_on,color:forest),title:Text('${user['businessAddress'] ?? 'Adres girilmedi'}'),subtitle:Text('${user['district'] ?? ''} / ${user['province'] ?? ''}'))),
  const LocalModeNote(),
  const Text('Önemli: Bu ekranlar test için çalışır. İşletme sahipliği doğrulaması, gerçek satış onayı, sunucu, cihazlar arası eşitleme ve güvenli kullanıcı yetkilendirmesi bu yerel sürümde bulunmaz.'),
  ]);
