@@ -27,6 +27,17 @@ jobs:
       - name: Android platform dosyalarını oluştur
         working-directory: mobil
         run: flutter create --platforms=android --project-name cafe_dunyam .
+      - name: NFC iznini ekle
+        working-directory: mobil
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text()
+          if "android.permission.NFC" not in s:
+              s = s.replace("<application", '    <uses-permission android:name="android.permission.NFC" />\\n    <application', 1)
+              p.write_text(s)
+          PY
       - name: Paketleri indir
         working-directory: mobil
         run: flutter pub get
