@@ -1034,8 +1034,19 @@ class _AdminUsersState extends State<AdminUsers> {
   Future<void> _remove(Map<String,dynamic> u) async {
     final ok = await showDialog<bool>(context: context, builder: (c)=>AlertDialog(title: const Text('Kullanıcıyı sil?'), content: Text('${u['email']} hesabı bu cihazdan kaldırılacak.'), actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Vazgeç')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('Sil'))]));
     if (ok != true || u['role'] == 'admin') return;
-    final users = await LocalData.list(usersKey, []); users.removeWhere((x)=>x['email']==u['email']); await LocalData.saveList(usersKey, users);
-    if (mounted) setState((){});
+    if (cloud.auth.currentSession != null && LocalData._uuid(u['id']?.toString())) {
+      try {
+        await cloud.rpc('admin_delete_user', params: {'target_id': u['id']});
+        if (mounted) setState(() {});
+      } on PostgrestException catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hesap silinemedi: ${e.message}')));
+      }
+      return;
+    }
+    final users = await LocalData.list(usersKey, []);
+    users.removeWhere((x) => x['email'] == u['email']);
+    await LocalData.saveList(usersKey, users);
+    if (mounted) setState(() {});
   }
   @override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(usersKey, []),builder:(context,s){
     if(!s.hasData)return const Center(child:CircularProgressIndicator());
