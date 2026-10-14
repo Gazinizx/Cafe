@@ -85,9 +85,11 @@ class _AppShellState extends State<AppShell> {
       setState(() => status = 'Bu NFC kodu tanınmadı: $code');
       return;
     }
+    final cafe = match;
+    if (cafe == null) return;
     setState(() {
-      stamps[match!.name] = (stamps[match.name] ?? 0) + 1;
-      status = '${match.name} kartına 1 damga eklendi.';
+      stamps[cafe.name] = (stamps[cafe.name] ?? 0) + 1;
+      status = '${cafe.name} kartına 1 damga eklendi.';
     });
     await _saveStamps();
   }
@@ -194,7 +196,7 @@ class _CafeListPageState extends State<CafeListPage> {
       const PageHeading('Kafeleri keşfet', 'Şehir ve kategoriye göre ara.'),
       TextField(onChanged: (v) => setState(() => query = v), decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Kafe ara', filled: true, fillColor: Colors.white)),
       const SizedBox(height: 8),
-      Wrap(spacing: 6, children: cities.map((v) => ChoiceChip(label: Text(v), selected: city == v, onSelected: (_) => setState(() => city = v)).toList()),
+      Wrap(spacing: 6, children: cities.map((v) => ChoiceChip(label: Text(v), selected: city == v, onSelected: (_) => setState(() => city = v))).toList()),
       ...filtered.map((c) => CafeTile(cafe: c, onTap: () => widget.openCafe(c))),
     ]);
   }
