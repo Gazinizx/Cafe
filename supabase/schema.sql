@@ -97,9 +97,9 @@ alter table public.business_applications enable row level security;
 -- Profiles: users can read/update their own profile; admin operations belong in trusted server tooling.
 create or replace function public.is_cafe_admin()
 returns boolean language sql stable security definer set search_path = ''
-as $
+as $function$
   select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin' and approval_status = 'approved');
-$;
+$function$;
 
 create policy "profiles_read_self" on public.profiles for select to authenticated using (id = auth.uid());
 create policy "profiles_read_admin" on public.profiles for select to authenticated using (public.is_cafe_admin());
