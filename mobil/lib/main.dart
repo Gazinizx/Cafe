@@ -21,9 +21,40 @@ class CafeLogo extends StatelessWidget {
   const CafeLogo({super.key, this.size = 42, this.light = false});
   @override Widget build(BuildContext context) => Container(
     width: size, height: size,
-    decoration: BoxDecoration(color: light ? const Color(0xFF352116) : forest, borderRadius: BorderRadius.circular(size * .28), border: Border.all(color: gold.withOpacity(.75), width: 1.2)),
-    child: Icon(Icons.coffee_rounded, size: size * .62, color: gold),
+    decoration: BoxDecoration(
+      color: light ? const Color(0xFF352116) : forest,
+      borderRadius: BorderRadius.circular(size * .28),
+      border: Border.all(color: gold.withOpacity(.75), width: 1.2),
+    ),
+    padding: EdgeInsets.all(size * .10),
+    child: CustomPaint(painter: CafeCupLogoPainter(), size: Size.square(size * .80)),
   );
+}
+
+class CafeCupLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final sx = size.width / 100;
+    final sy = size.height / 100;
+    canvas.save();
+    canvas.scale(sx, sy);
+    final creamPaint = Paint()..color = const Color(0xFFF7F0E5)..style = PaintingStyle.stroke..strokeWidth = 7..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
+    final copperPaint = Paint()..color = const Color(0xFFE4A05D)..style = PaintingStyle.stroke..strokeWidth = 6..strokeCap = StrokeCap.round..strokeJoin = StrokeJoin.round;
+    final cup = Path()..moveTo(18, 43)..quadraticBezierTo(22, 76, 47, 76)..quadraticBezierTo(70, 76, 76, 43);
+    canvas.drawPath(cup, creamPaint);
+    canvas.drawLine(const Offset(15, 41), const Offset(79, 41), creamPaint);
+    final handle = Path()..moveTo(75, 49)..cubicTo(98, 42, 98, 70, 75, 66);
+    canvas.drawPath(handle, copperPaint);
+    final steam1 = Path()..moveTo(40, 31)..cubicTo(25, 20, 48, 15, 43, 3);
+    final steam2 = Path()..moveTo(56, 31)..cubicTo(43, 20, 65, 15, 60, 7);
+    canvas.drawPath(steam1, copperPaint);
+    canvas.drawPath(steam2, creamPaint);
+    final saucer = Path()..moveTo(22, 84)..quadraticBezierTo(48, 95, 74, 84);
+    canvas.drawPath(saucer, copperPaint);
+    canvas.restore();
+  }
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
 class CafeDunyamApp extends StatelessWidget {
