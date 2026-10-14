@@ -23,14 +23,46 @@ SupabaseClient get cloud => Supabase.instance.client;
 Future<Map<String, dynamic>> cloudProfile(User authUser) async {
   final row = await cloud.from('profiles').select().eq('id', authUser.id).maybeSingle();
   final meta = authUser.userMetadata ?? <String, dynamic>{};
-  return <String, dynamic>{
+  final role = (row?['role'] ?? meta['role'] ?? 'customer').toString();
+  final user = <String, dynamic>{
     'id': authUser.id,
     'name': (row?['full_name'] ?? meta['full_name'] ?? authUser.email ?? 'Kullanıcı').toString(),
     'email': authUser.email ?? '',
-    'role': (row?['role'] ?? meta['role'] ?? 'customer').toString(),
-    'approvalStatus': (row?['approval_status'] ?? (meta['role'] == 'business' ? 'pending' : 'approved')).toString(),
+    'role': role,
+    'approvalStatus': (row?['approval_status'] ?? (role == 'business' ? 'pending' : 'approved')).toString(),
     'cloudAccount': true,
   };
+  if (role == 'business') {
+    final app = await cloud.from('business_applications').select().eq('business_id', authUser.id).maybeSingle();
+    final cafe = await cloud.from('cafes').select('id,name,city').eq('owner_id', authUser.id).maybeSingle();
+    if (app != null) {
+      user.addAll({
+        'cafeName': app['cafe_name'] ?? 'İşletmem',
+        'phone': app['phone'] ?? '',
+        'businessType': app['business_type'] ?? '',
+        'taxOffice': app['tax_office'] ?? '',
+        'taxNumber': app['tax_number'] ?? '',
+        'province': app['province'] ?? '',
+        'district': app['district'] ?? '',
+        'businessAddress': app['business_address'] ?? '',
+        'deliveryName': app['delivery_name'] ?? '',
+        'deliveryPhone': app['delivery_phone'] ?? '',
+        'deliveryProvince': app['delivery_province'] ?? '',
+        'deliveryDistrict': app['delivery_district'] ?? '',
+        'deliveryAddress': app['delivery_address'] ?? '',
+        'tagCount': app['tag_count'] ?? 0,
+        'applicationStatus': app['application_status'] ?? 'pending',
+      });
+    }
+    if (cafe != null) {
+      user['cafeId'] = cafe['id'];
+      user['cafeName'] = cafe['name'] ?? user['cafeName'];
+      user['city'] = cafe['city'] ?? user['province'];
+    }
+    final order = await cloud.from('business_orders').select().eq('business_id', authUser.id).order('created_at', ascending: false).limit(1).maybeSingle();
+    if (order != null) user['nfcOrder'] = Map<String,dynamic>.from(order['order_data'] as Map);
+  }
+  return user;
 }
 
 const forest = Color(0xFF211711);
@@ -105,22 +137,155 @@ class CafeDunyamApp extends StatelessWidget {
 }
 
 class LocalData {
+  static bool get _cloudReady => cloud.auth.currentSession != null;
+  static bool _uuid(String? value) => value != null && RegExp(r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$').hasMatch(value);
+
   static Future<List<Map<String, dynamic>>> list(String key, List<Map<String, dynamic>> defaults) async {
+    if (_cloudReady) {
+      final auth = cloud.auth.currentUser!;
+      final profile = await cloud.from('profiles').select('role').eq('id', auth.id).maybeSingle();
+      final isAdmin = profile?['role'] == 'admin';
+      if (key == cafesKey) {
+        final rows = await cloud.from('cafes').select().order('name');
+        return (rows as List).map((raw) {
+          final r = Map<String,dynamic>.from(raw as Map);
+          return <String,dynamic>{
+            'id': r['id'], 'name': r['name'], 'city': r['city'],
+            'type': r['category'] ?? 'Kafe', 'goal': 8,
+            'reward': '8 damgada ödül', 'active': r['is_active'] == true,
+            'ownerId': r['owner_id'], 'address': r['address'],
+          };
+        }).toList();
+      }
+      if (key == dealsKey) {
+        final rows = await cloud.from('campaigns').select('*, cafes(name, owner_id)').order('created_at', ascending: false);
+        return (rows as List).map((raw) {
+          final r = Map<String,dynamic>.from(raw as Map);
+          final cafe = r['cafes'] is Map ? Map<String,dynamic>.from(r['cafes'] as Map) : <String,dynamic>{};
+          return <String,dynamic>{
+            'id': r['id'], 'title': r['title'], 'benefit': r['benefit'],
+            'audience': r['audience'] ?? 'Herkes', 'cafeId': r['cafe_id'],
+            'active': r['is_active'] == true, 'ownerId': cafe['owner_id'],
+            'ownerEmail': cafe['owner_id'] == auth.id ? auth.email : '',
+            'ownerName': cafe['name'] ?? 'Kafe',
+          };
+        }).toList();
+      }
+      if (key == usersKey && isAdmin) {
+        final profiles = await cloud.from('profiles').select().order('created_at', ascending: false);
+        final apps = await cloud.from('business_applications').select();
+        final appById = <String,Map<String,dynamic>>{
+          for (final a in (apps as List)) (a['business_id'] as String): Map<String,dynamic>.from(a as Map)
+        };
+        return (profiles as List).map((raw) {
+          final r = Map<String,dynamic>.from(raw as Map);
+          final app = appById[r['id']] ?? <String,dynamic>{};
+          return <String,dynamic>{
+            'id': r['id'], 'name': r['full_name'], 'email': '',
+            'role': r['role'], 'approvalStatus': r['approval_status'],
+            'cafeName': app['cafe_name'] ?? r['full_name'],
+            'phone': app['phone'] ?? '', 'businessType': app['business_type'] ?? '',
+            'taxOffice': app['tax_office'] ?? '', 'taxNumber': app['tax_number'] ?? '',
+            'province': app['province'] ?? '', 'district': app['district'] ?? '',
+            'businessAddress': app['business_address'] ?? '',
+            'deliveryName': app['delivery_name'] ?? '', 'deliveryPhone': app['delivery_phone'] ?? '',
+            'deliveryProvince': app['delivery_province'] ?? '', 'deliveryDistrict': app['delivery_district'] ?? '',
+            'deliveryAddress': app['delivery_address'] ?? '', 'tagCount': app['tag_count'] ?? 0,
+            'applicationStatus': app['application_status'] ?? r['approval_status'],
+          };
+        }).toList();
+      }
+      if (key == businessOrdersKey) {
+        final query = cloud.from('business_orders').select();
+        final rows = isAdmin
+          ? await query.order('created_at', ascending: false)
+          : await cloud.from('business_orders').select().eq('business_id', auth.id).order('created_at', ascending: false);
+        return (rows as List).map((raw) {
+          final r = Map<String,dynamic>.from(raw as Map);
+          final data = r['order_data'] is Map ? Map<String,dynamic>.from(r['order_data'] as Map) : <String,dynamic>{};
+          data['id'] = r['id']; data['businessId'] = r['business_id'];
+          data['orderStatus'] = r['order_status']; data['paymentStatus'] = r['payment_status'];
+          return data;
+        }).toList();
+      }
+      if (key == usersKey || key == businessOrdersKey) return [];
+    }
     final p = await SharedPreferences.getInstance();
     final raw = p.getString(key);
     if (raw == null) { await p.setString(key, jsonEncode(defaults)); return defaults; }
     try { return (jsonDecode(raw) as List).map((e) => Map<String, dynamic>.from(e as Map)).toList(); }
     catch (_) { return defaults; }
   }
+
   static Future<void> saveList(String key, List<Map<String, dynamic>> value) async {
-    final p = await SharedPreferences.getInstance(); await p.setString(key, jsonEncode(value));
+    if (_cloudReady) {
+      final auth = cloud.auth.currentUser!;
+      final profile = await cloud.from('profiles').select('role').eq('id', auth.id).maybeSingle();
+      final isAdmin = profile?['role'] == 'admin';
+      if (key == dealsKey) {
+        final cafe = await cloud.from('cafes').select('id').eq('owner_id', auth.id).maybeSingle();
+        final ownedCafeId = cafe?['id']?.toString();
+        if (ownedCafeId != null) {
+          final desired = value.where((d) => d['cafeId'] == ownedCafeId || d['ownerId'] == auth.id || d['ownerEmail'] == auth.email || (d['id']?.toString().startsWith('local-') == true)).toList();
+          final oldRows = await cloud.from('campaigns').select('id').eq('cafe_id', ownedCafeId);
+          final desiredIds = desired.map((d) => d['id']?.toString()).whereType<String>().where(_uuid).toSet();
+          for (final old in (oldRows as List)) {
+            final id = old['id'].toString();
+            if (!desiredIds.contains(id)) await cloud.from('campaigns').delete().eq('id', id);
+          }
+          for (final d in desired) {
+            final payload = <String,dynamic>{
+              'cafe_id': ownedCafeId, 'title': d['title'] ?? '',
+              'benefit': d['benefit'] ?? '', 'audience': d['audience'] ?? 'Herkes',
+              'is_active': d['active'] == true,
+            };
+            if (_uuid(d['id']?.toString())) payload['id'] = d['id'];
+            await cloud.from('campaigns').upsert(payload);
+          }
+          return;
+        }
+      }
+      if (key == usersKey && isAdmin) {
+        for (final u in value) {
+          final id = u['id']?.toString();
+          if (!_uuid(id)) continue;
+          final status = (u['approvalStatus'] ?? 'pending').toString();
+          await cloud.from('profiles').update({'approval_status': status}).eq('id', id!);
+          if (u['role'] == 'business') {
+            await cloud.from('business_applications').update({'application_status': status}).eq('business_id', id);
+            await cloud.from('cafes').update({'is_active': status == 'approved'}).eq('owner_id', id);
+          }
+        }
+        return;
+      }
+      if (key == businessOrdersKey && isAdmin) {
+        for (final o in value) {
+          final id = o['id']?.toString();
+          if (!_uuid(id)) continue;
+          final data = Map<String,dynamic>.from(o)..remove('id')..remove('businessId')..remove('orderStatus')..remove('paymentStatus');
+          await cloud.from('business_orders').update({
+            'order_data': data, 'order_status': o['orderStatus'] ?? 'pending',
+            'payment_status': o['paymentStatus'] ?? 'pending',
+          }).eq('id', id!);
+        }
+        return;
+      }
+    }
+    final p = await SharedPreferences.getInstance();
+    await p.setString(key, jsonEncode(value));
   }
+
   static Future<Map<String, int>> stamps() async {
+    if (_cloudReady) {
+      final rows = await cloud.from('cafe_memberships').select('cafe_id, stamps').eq('customer_id', cloud.auth.currentUser!.id);
+      return {for (final r in (rows as List)) r['cafe_id'].toString(): (r['stamps'] as num).toInt()};
+    }
     final p = await SharedPreferences.getInstance();
     try { return (jsonDecode(p.getString(stampsKey) ?? '{}') as Map).map((k,v) => MapEntry(k.toString(), (v as num).toInt())); }
     catch (_) { return {}; }
   }
   static Future<void> saveStamps(Map<String,int> value) async {
+    if (_cloudReady) return; // Stamp issuance is intentionally server-controlled.
     final p = await SharedPreferences.getInstance(); await p.setString(stampsKey, jsonEncode(value));
   }
 }
