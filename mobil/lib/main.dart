@@ -330,8 +330,12 @@ class _GatePageState extends State<GatePage> {
   @override void initState() { super.initState(); _check(); }
   Future<void> _check() async {
     final p = await SharedPreferences.getInstance();
-    await LocalData.list(cafesKey, starterCafes);
-    await LocalData.list(dealsKey, starterDeals);
+    try {
+      await LocalData.list(cafesKey, starterCafes);
+      await LocalData.list(dealsKey, starterDeals);
+    } catch (_) {
+      // Keep the entry screen usable if the cloud schema has not been applied yet.
+    }
     final users = await LocalData.list(usersKey, []);
     // Demo müşteri hesabını her kurulumda hazır tut; yalnızca yerel test içindir.
     if (!users.any((u) => u['email'] == 'deneme')) {
