@@ -351,7 +351,7 @@ class DealsPage extends StatelessWidget {
     if (saved.isEmpty)
       const Card(child: ListTile(leading: Icon(Icons.bookmark_border), title: Text('Henüz fırsat kaydetmedin.'), subtitle: Text('Bir fırsatın yanındaki yer imi simgesine dokun.')))
     else
-      ...saved.toList()..sort().map((title) => Card(child: ListTile(leading: const Icon(Icons.bookmark, color: green), title: Text(title)))),
+      ...([...saved]..sort()).map((title) => Card(child: ListTile(leading: const Icon(Icons.bookmark, color: green), title: Text(title)))),
     const Padding(padding: EdgeInsets.only(top: 10), child: Text('Fırsatlar örnek veridir. Gerçek işletme kampanyaları henüz bağlı değildir.', style: TextStyle(color: Colors.black54))),
   ]);
 }
