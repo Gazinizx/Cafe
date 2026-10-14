@@ -488,7 +488,14 @@ class BusinessDashboard extends StatelessWidget{
  const SizedBox(height:16),const Text('Yönetim araçları',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:forest)),
  const Card(child:ListTile(leading:Icon(Icons.campaign,color:forest),title:Text('Kampanya yönetimi'),subtitle:Text('Kampanya oluştur, düzenle ve yayından kaldır.'))),
  const Card(child:ListTile(leading:Icon(Icons.loyalty,color:forest),title:Text('Sadakat programı'),subtitle:Text('Kart ve ödül yapısı sonraki doğrulama adımına hazır taslak olarak ele alınır.'))),
- const LocalModeNote(),
+ if (user['approvalStatus'] == 'approved') Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    const Text('Başvuru onaylandı', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: forest)),
+    const SizedBox(height: 8),
+    const Text('Ödeme yöntemi: IBAN havale / EFT'),
+    const Text('IBAN ve hesap sahibi bilgisi yönetici tarafından ayrıca paylaşılmalıdır. Bu prototipte gerçek banka bilgisi tanımlı değildir.'),
+    Text('Sipariş toplamı: ${(user['nfcOrder'] as Map?)?['totalTry'] ?? 0} TL (örnek fiyat)'),
+  ]))),
+  const LocalModeNote(),
  ]);
 }
 class BusinessDeals extends StatefulWidget {
@@ -510,6 +517,30 @@ class _BusinessDealsState extends State<BusinessDeals> {
     await LocalData.saveList(dealsKey, deals);
     title.clear(); benefit.clear();
     if (mounted) setState(() => busy = false);
+  }
+  Future<void> _edit(Map<String,dynamic> d) async {
+    if (!_canManage(d)) return;
+    final editTitle = TextEditingController(text: '${d['title']}');
+    final editBenefit = TextEditingController(text: '${d['benefit']}');
+    final result = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Kampanyayı düzenle'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: editTitle, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
+        TextField(controller: editBenefit, decoration: const InputDecoration(labelText: 'İndirim / avantaj')),
+      ]),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Kaydet'))],
+    ));
+    if (result == true && editTitle.text.trim().isNotEmpty && editBenefit.text.trim().isNotEmpty) {
+      final deals = await LocalData.list(dealsKey, starterDeals);
+      final i = deals.indexWhere((x) => x['id'] == d['id']);
+      if (i >= 0 && _canManage(deals[i])) {
+        deals[i]['title'] = editTitle.text.trim();
+        deals[i]['benefit'] = editBenefit.text.trim();
+        await LocalData.saveList(dealsKey, deals);
+        if (mounted) setState(() {});
+      }
+    }
+    editTitle.dispose(); editBenefit.dispose();
   }
   Future<void> _toggle(Map<String,dynamic> d) async {
     if (!_canManage(d)) return;
@@ -548,7 +579,8 @@ class _BusinessDealsState extends State<BusinessDeals> {
         title: Text('${d['title']}'),
         subtitle: Text('${d['benefit']}\\nDurum: ${d['active'] == true ? 'Aktif (yerel)' : 'Pasif'}'),
         isThreeLine: true,
-        trailing: PopupMenuButton<String>(onSelected: (v) => v == 'toggle' ? _toggle(d) : _delete('${d['id']}'), itemBuilder: (_) => const [
+        trailing: PopupMenuButton<String>(onSelected: (v) { if (v == 'edit') _edit(d); else if (v == 'toggle') _toggle(d); else _delete('${d['id']}'); }, itemBuilder: (_) => const [
+          PopupMenuItem(value: 'edit', child: Text('Düzenle')),
           PopupMenuItem(value: 'toggle', child: Text('Aktif / pasif değiştir')),
           PopupMenuItem(value: 'delete', child: Text('Sil')),
         ]),
