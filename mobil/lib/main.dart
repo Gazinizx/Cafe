@@ -21,7 +21,7 @@ class CafeLogo extends StatelessWidget {
   const CafeLogo({super.key, this.size = 42, this.light = false});
   @override Widget build(BuildContext context) => Container(
     width: size, height: size,
-    decoration: BoxDecoration(color: light ? const Color(0xFF352116) : forest, borderRadius: BorderRadius.circular(size * .28), border: Border.all(color: gold.withValues(alpha: .75), width: 1.2)),
+    decoration: BoxDecoration(color: light ? const Color(0xFF352116) : forest, borderRadius: BorderRadius.circular(size * .28), border: Border.all(color: gold.withOpacity(.75), width: 1.2)),
     child: Icon(Icons.coffee_rounded, size: size * .62, color: gold),
   );
 }
