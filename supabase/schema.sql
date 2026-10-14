@@ -161,6 +161,64 @@ begin
   insert into public.profiles (id, full_name, role, approval_status)
   values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name',''), requested_role,
           case when requested_role = 'business' then 'pending' else 'approved' end);
+
+  if requested_role = 'business' then
+    insert into public.business_applications (
+      business_id, cafe_name, phone, business_type, tax_office, tax_number,
+      province, district, business_address, delivery_name, delivery_phone,
+      delivery_province, delivery_district, delivery_address, tag_count
+    ) values (
+      new.id,
+      coalesce(new.raw_user_meta_data ->> 'cafe_name','İşletme'),
+      new.raw_user_meta_data ->> 'phone',
+      new.raw_user_meta_data ->> 'business_type',
+      new.raw_user_meta_data ->> 'tax_office',
+      new.raw_user_meta_data ->> 'tax_number',
+      new.raw_user_meta_data ->> 'province',
+      new.raw_user_meta_data ->> 'district',
+      new.raw_user_meta_data ->> 'business_address',
+      new.raw_user_meta_data ->> 'delivery_name',
+      new.raw_user_meta_data ->> 'delivery_phone',
+      new.raw_user_meta_data ->> 'delivery_province',
+      new.raw_user_meta_data ->> 'delivery_district',
+      new.raw_user_meta_data ->> 'delivery_address',
+      coalesce(nullif(new.raw_user_meta_data ->> 'tag_count','')::integer, 0)
+    );
+
+    insert into public.cafes (owner_id, name, city, district, address, category, is_active)
+    values (
+      new.id,
+      coalesce(new.raw_user_meta_data ->> 'cafe_name','İşletme'),
+      coalesce(new.raw_user_meta_data ->> 'province',''),
+      new.raw_user_meta_data ->> 'district',
+      new.raw_user_meta_data ->> 'business_address',
+      new.raw_user_meta_data ->> 'business_type',
+      false
+    );
+
+    insert into public.business_orders (business_id, order_data, order_status, payment_status)
+    values (
+      new.id,
+      jsonb_build_object(
+        'businessName', coalesce(new.raw_user_meta_data ->> 'cafe_name','İşletme'),
+        'tagCount', coalesce(nullif(new.raw_user_meta_data ->> 'tag_count','')::integer, 0),
+        'packagePriceTry', coalesce(nullif(new.raw_user_meta_data ->> 'package_price_try','')::numeric, 0),
+        'shippingTry', coalesce(nullif(new.raw_user_meta_data ->> 'shipping_try','')::numeric, 0),
+        'totalTry', coalesce(nullif(new.raw_user_meta_data ->> 'order_total_try','')::numeric, 0),
+        'paymentMethod', 'IBAN havale/EFT',
+        'paymentStatus', 'Ödeme bekliyor',
+        'orderStatus', 'Başvuru inceleniyor',
+        'recipientName', new.raw_user_meta_data ->> 'delivery_name',
+        'recipientPhone', new.raw_user_meta_data ->> 'delivery_phone',
+        'province', new.raw_user_meta_data ->> 'delivery_province',
+        'district', new.raw_user_meta_data ->> 'delivery_district',
+        'address', new.raw_user_meta_data ->> 'delivery_address',
+        'createdAt', now()
+      ),
+      'pending',
+      'pending'
+    );
+  end if;
   return new;
 end;
 $$;
