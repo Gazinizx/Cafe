@@ -116,6 +116,7 @@ begin
   if target_id = auth.uid() or not public.is_cafe_admin() then
     raise exception 'Not authorized to delete this account';
   end if;
+  delete from public.stamp_events where customer_id = target_id or issued_by = target_id or cafe_id in (select id from public.cafes where owner_id = target_id);
   delete from public.cafes where owner_id = target_id;
   delete from auth.users where id = target_id;
 end;
