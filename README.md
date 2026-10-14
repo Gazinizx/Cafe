@@ -1,13 +1,11 @@
 # Cafe Dünyam
 
-Flutter ile hazırlanmış mobil uygulama prototipi. Bu sürüm örnek kampanya, kafe, sadakat kartı ve QR tarama ekranları içerir.
+Flutter mobil uygulaması ve tarayıcıda çalışan örnek yönetim paneli.
 
-## GitHub Actions ile APK
-1. GitHub deposunda Actions sekmesini aç.
-2. "Cafe Dunyam Android APK" iş akışını seç.
-3. Run workflow düğmesine dokun veya main dalına bir commit gönder.
-4. Başarılı çalışmanın Artifacts bölümünden cafe-dunyam-android-apk dosyasını indir.
-5. ZIP'i açıp app-release.apk dosyasını Android telefona kur.
+- `mobil/`: Android Flutter uygulaması.
+- `yonetim/index.html`: kafeler ve kampanyalar için yerel yönetim paneli.
+- `.github/workflows/android-apk.yml`: GitHub Actions APK derlemesi.
 
-## Sınırlar
-Bu prototipte giriş/kayıt, gerçek damga verme, ödül kullanımı ve kalıcı veri henüz backend'e bağlı değildir. QR kod yalnızca okunur; kod okutmak tek başına damga vermez.
+Veritabanı olmadan kullanım: mobil uygulama örnek kafeleri ve kampanyaları içerir; damga sayacı bellekte tutulur. Yönetim paneli localStorage kullanır ve mobil uygulamayla eşitlenmez. Gerçek hesaplar, yetkilendirme, cihazlar arası eşitleme ve güvenli damga doğrulaması için ileride sunucu/API gerekir. QR kod okutmak tek başına damga vermez.
+
+APK için GitHub > Actions > Cafe Dunyam Android APK > Run workflow seç. Başarılı derlemenin Artifacts bölümünden cafe-dunyam-android-apk dosyasını indir.

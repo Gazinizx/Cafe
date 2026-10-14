@@ -1,152 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
-
-void main() => runApp(const CafeDunyamApp());
-
-const forest = Color(0xFF174C3C);
-const cream = Color(0xFFF7F1E5);
-const cocoa = Color(0xFF795548);
-
-class CafeDunyamApp extends StatelessWidget {
-  const CafeDunyamApp({super.key});
-  @override
-  Widget build(BuildContext context) => MaterialApp(
-    title: 'Cafe Dünyam',
-    debugShowCheckedModeBanner: false,
-    theme: ThemeData(colorScheme: ColorScheme.fromSeed(seedColor: forest, surface: cream), scaffoldBackgroundColor: cream, useMaterial3: true),
-    home: const MainShell(),
-  );
-}
-
-class MainShell extends StatefulWidget {
-  const MainShell({super.key});
-  @override
-  State<MainShell> createState() => _MainShellState();
-}
-class _MainShellState extends State<MainShell> {
-  int tab = 0;
-  final pages = const [HomePage(), CardsPage(), OffersPage(), ProfilePage()];
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    body: SafeArea(child: IndexedStack(index: tab, children: pages)),
-    bottomNavigationBar: NavigationBar(
-      selectedIndex: tab,
-      onDestinationSelected: (v) => setState(() => tab = v),
-      destinations: const [
-        NavigationDestination(icon: Icon(Icons.home_outlined), selectedIcon: Icon(Icons.home), label: 'Ana Sayfa'),
-        NavigationDestination(icon: Icon(Icons.loyalty_outlined), selectedIcon: Icon(Icons.loyalty), label: 'Kartlarım'),
-        NavigationDestination(icon: Icon(Icons.local_offer_outlined), selectedIcon: Icon(Icons.local_offer), label: 'Fırsatlar'),
-        NavigationDestination(icon: Icon(Icons.person_outline), selectedIcon: Icon(Icons.person), label: 'Profil'),
-      ],
-    ),
-  );
-}
-
-class HomePage extends StatelessWidget {
-  const HomePage({super.key});
-  @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
-    const Text('CAFE DÜNYAM', style: TextStyle(color: forest, fontWeight: FontWeight.w900, letterSpacing: 2)),
-    const SizedBox(height: 18),
-    Container(padding: const EdgeInsets.all(22), decoration: BoxDecoration(color: forest, borderRadius: BorderRadius.circular(24)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Icon(Icons.coffee, color: cream, size: 34),
-      SizedBox(height: 14),
-      Text('Kahve molan,\navantajın olsun.', style: TextStyle(color: cream, fontSize: 27, fontWeight: FontWeight.bold)),
-      SizedBox(height: 8),
-      Text('Sevdiğin kafelerin kampanyalarını keşfet.', style: TextStyle(color: cream)),
-    ])),
-    const SizedBox(height: 24),
-    const SectionTitle('Öne çıkan kafeler'),
-    const CafeTile(name: 'Kahve Durağı', subtitle: 'Kahve ve tatlılarda fırsatlar', icon: Icons.local_cafe),
-    const CafeTile(name: 'Mola Coffee', subtitle: 'Öğrencilere özel indirimler', icon: Icons.coffee),
-    const CafeTile(name: 'Kitap & Kahve', subtitle: 'Her 8 kahvede 1 kahve hediye', icon: Icons.menu_book),
-    const SizedBox(height: 20),
-    const SectionTitle('Günün kampanyaları'),
-    const OfferTile(title: 'Öğrenci indirimi', subtitle: 'Öğrenci kimliğinle seçili içeceklerde %15 indirim', icon: Icons.school),
-    const OfferTile(title: 'Kahven yanında tatlı', subtitle: 'Seçili kahvelerde tatlı fırsatları', icon: Icons.cake),
-  ]);
-}
-
-class SectionTitle extends StatelessWidget {
-  final String text;
-  const SectionTitle(this.text, {super.key});
-  @override
-  Widget build(BuildContext context) => Padding(padding: const EdgeInsets.only(bottom: 10), child: Text(text, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: forest)));
-}
-class CafeTile extends StatelessWidget {
-  final String name, subtitle;
-  final IconData icon;
-  const CafeTile({required this.name, required this.subtitle, required this.icon, super.key});
-  @override
-  Widget build(BuildContext context) => Card(color: Colors.white, child: ListTile(leading: CircleAvatar(backgroundColor: cream, child: Icon(icon, color: forest)), title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: Text(subtitle), trailing: const Icon(Icons.chevron_right), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailPage(title: name, description: subtitle)))));
-}
-class OfferTile extends StatelessWidget {
-  final String title, subtitle;
-  final IconData icon;
-  const OfferTile({required this.title, required this.subtitle, required this.icon, super.key});
-  @override
-  Widget build(BuildContext context) => Card(color: Colors.white, child: ListTile(leading: CircleAvatar(backgroundColor: const Color(0xFFE8DCC7), child: Icon(icon, color: cocoa)), title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)), subtitle: Text(subtitle), onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => DetailPage(title: title, description: subtitle)))));
-}
-class DetailPage extends StatelessWidget {
-  final String title, description;
-  const DetailPage({required this.title, required this.description, super.key});
-  @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text(title)), body: Padding(padding: const EdgeInsets.all(24), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Icon(Icons.coffee, size: 54, color: forest), const SizedBox(height: 20), Text(title, style: const TextStyle(fontSize: 25, fontWeight: FontWeight.bold)), const SizedBox(height: 12), Text(description), const SizedBox(height: 24), const Text('Demo içerik: kampanyalar henüz sunucuya bağlı değildir.')]))); 
-}
-class CardsPage extends StatelessWidget {
-  const CardsPage({super.key});
-  @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
-    const SectionTitle('Sadakat kartlarım'),
-    const Text('Her kafenin kartı ayrıdır. Damgalar gerçek alışveriş doğrulamasıyla eklenmelidir.'),
-    const SizedBox(height: 12),
-    const LoyaltyTile(name: 'Kahve Durağı', stamps: 5, target: 8),
-    const LoyaltyTile(name: 'Mola Coffee', stamps: 2, target: 6),
-    const LoyaltyTile(name: 'Kitap & Kahve', stamps: 7, target: 8),
-    const SizedBox(height: 20),
-    FilledButton.icon(style: FilledButton.styleFrom(backgroundColor: forest), onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ScanPage())), icon: const Icon(Icons.qr_code_scanner), label: const Text('QR kod tara')),
-  ]);
-}
-class LoyaltyTile extends StatelessWidget {
-  final String name;
-  final int stamps, target;
-  const LoyaltyTile({required this.name, required this.stamps, required this.target, super.key});
-  @override
-  Widget build(BuildContext context) => Card(color: Colors.white, child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    Row(children: [const Icon(Icons.loyalty, color: forest), const SizedBox(width: 8), Expanded(child: Text(name, style: const TextStyle(fontWeight: FontWeight.bold))), Text('$stamps/$target')]),
-    const SizedBox(height: 12),
-    Row(children: List.generate(target, (i) => Expanded(child: Container(margin: const EdgeInsets.symmetric(horizontal: 3), height: 27, decoration: BoxDecoration(color: i < stamps ? forest : cream, shape: BoxShape.circle), child: Icon(i < stamps ? Icons.check : Icons.coffee, size: 15, color: i < stamps ? Colors.white : cocoa))))),
-    const SizedBox(height: 8), Text('Hedefe ulaşınca ödül kazanırsın.', style: TextStyle(color: Colors.grey.shade700, fontSize: 12)),
-  ])));
-}
-class ScanPage extends StatefulWidget {
-  const ScanPage({super.key});
-  @override
-  State<ScanPage> createState() => _ScanPageState();
-}
-class _ScanPageState extends State<ScanPage> {
-  String? value;
-  @override
-  Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: const Text('QR kod tara')), body: Column(children: [
-    Expanded(child: MobileScanner(onDetect: (capture) { final codes = capture.barcodes; if (codes.isNotEmpty && codes.first.rawValue != null && value == null) setState(() => value = codes.first.rawValue); })),
-    Padding(padding: const EdgeInsets.all(18), child: Text(value == null ? 'Kafenin QR kodunu kameraya göster.' : 'Okunan kod: $value\nBu prototip gerçek damga eklemez; sunucu doğrulaması henüz bağlı değil.', textAlign: TextAlign.center)),
-  ]));
-}
-class OffersPage extends StatelessWidget {
-  const OffersPage({super.key});
-  @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: const [SectionTitle('Fırsatlar'), OfferTile(title: 'Öğrenci indirimi', subtitle: 'Seçili içeceklerde %15 indirim', icon: Icons.school), OfferTile(title: 'Tatlı molası', subtitle: 'Kahvenin yanında seçili tatlılarda fırsat', icon: Icons.cake), OfferTile(title: 'Sadakat ödülü', subtitle: 'Kendi kartındaki damgaları takip et', icon: Icons.card_giftcard)]);
-}
-class ProfilePage extends StatelessWidget {
-  const ProfilePage({super.key});
-  @override
-  Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
-    const SectionTitle('Profil'),
-    const CircleAvatar(radius: 38, backgroundColor: forest, child: Icon(Icons.person, color: cream, size: 40)),
-    const SizedBox(height: 12),
-    const Text('Cafe Dünyam kullanıcısı', textAlign: TextAlign.center, style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
-    const SizedBox(height: 20),
-    const Card(child: ListTile(leading: Icon(Icons.info_outline), title: Text('Demo sürümü'), subtitle: Text('Giriş, hesap kaydı ve veri eşitleme henüz aktif değil.'))),
-    Card(child: ListTile(leading: const Icon(Icons.help_outline), title: const Text('Yardım ve destek'), onTap: () => showDialog(context: context, builder: (_) => const AlertDialog(title: Text('Destek'), content: Text('Destek sayfası daha sonra eklenecek.'))))),
-  ]);
-}
+void main()=>runApp(const App());
+const g=Color(0xFF174C3C),c=Color(0xFFF7F1E5),b=Color(0xFF795548);
+class Cafe{final String name,city,type,reward;final int goal;final IconData icon;const Cafe(this.name,this.city,this.type,this.reward,this.goal,this.icon);}
+const cafes=<Cafe>[Cafe('Kahve Durağı','İstanbul','Kahve ve tatlı','8 kahvede 1 kahve hediye',8,Icons.local_cafe),Cafe('Mola Coffee','Ankara','Modern kahve','Öğrencilere %15 indirim',6,Icons.coffee),Cafe('Kitap & Kahve','İzmir','Kitap kafe','8 damgada filtre kahve hediye',8,Icons.menu_book),Cafe('Fincan Atölyesi','Kayseri','Üçüncü nesil kahve','Hafta içi tatlı fırsatı',7,Icons.coffee_maker),Cafe('Pasta Molası','Bursa','Kahve ve pastane','Kahve yanında tatlı avantajı',5,Icons.cake)];
+class App extends StatelessWidget{const App({super.key});@override Widget build(BuildContext x)=>MaterialApp(title:'Cafe Dünyam',debugShowCheckedModeBanner:false,theme:ThemeData(useMaterial3:true,colorScheme:ColorScheme.fromSeed(seedColor:g,surface:c),scaffoldBackgroundColor:c,appBarTheme:const AppBarTheme(backgroundColor:c,foregroundColor:g),cardTheme:CardThemeData(color:Colors.white,elevation:0,shape:RoundedRectangleBorder(borderRadius:BorderRadius.circular(18)))),home:const Shell());}
+class Shell extends StatefulWidget{const Shell({super.key});@override State<Shell> createState()=>S();}
+class S extends State<Shell>{int tab=0;final Map<String,int> stamps={for(final x in cafes)x.name:0};final Set<String> saved={};@override Widget build(BuildContext x)=>Scaffold(body:SafeArea(child:IndexedStack(index:tab,children:[Home(open:detail,go:(v)=>setState(()=>tab=v)),ListC(open:detail),Cards(stamps:stamps,scan:()=>Navigator.push(x,MaterialPageRoute(builder:(_)=>const Scanner()))),Deals(saved:saved,toggle:(v)=>setState(()=>saved.contains(v)?saved.remove(v):saved.add(v))),const Profile()])),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(v)=>setState(()=>tab=v),destinations:const[NavigationDestination(icon:Icon(Icons.home_outlined),label:'Ana Sayfa'),NavigationDestination(icon:Icon(Icons.storefront_outlined),label:'Kafeler'),NavigationDestination(icon:Icon(Icons.loyalty_outlined),label:'Kartlarım'),NavigationDestination(icon:Icon(Icons.local_offer_outlined),label:'Fırsatlar'),NavigationDestination(icon:Icon(Icons.person_outline),label:'Profil')]));void detail(Cafe a)=>Navigator.push(context,MaterialPageRoute(builder:(_)=>Detail(a)));}
+class Head extends StatelessWidget{final String title,sub;const Head(this.title,this.sub,{super.key});@override Widget build(BuildContext x)=>Padding(padding:const EdgeInsets.only(bottom:15),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[const Text('CAFE DÜNYAM',style:TextStyle(color:b,fontWeight:FontWeight.w900,letterSpacing:2)),const SizedBox(height:7),Text(title,style:const TextStyle(fontSize:29,fontWeight:FontWeight.w900,color:g)),Text(sub,style:TextStyle(color:Colors.grey.shade700))]));}
+class H2 extends StatelessWidget{final String t;const H2(this.t,{super.key});@override Widget build(BuildContext x)=>Padding(padding:const EdgeInsets.only(top:18,bottom:8),child:Text(t,style:const TextStyle(color:g,fontWeight:FontWeight.w800,fontSize:20)));}
+class Home extends StatelessWidget{final ValueChanged<Cafe> open;final ValueChanged<int> go;const Home({required this.open,required this.go,super.key});@override Widget build(BuildContext x)=>ListView(padding:const EdgeInsets.all(20),children:[Container(padding:const EdgeInsets.all(23),decoration:BoxDecoration(color:g,borderRadius:BorderRadius.circular(25)),child:const Column(crossAxisAlignment:CrossAxisAlignment.start,children:[Icon(Icons.coffee,color:Color(0xFFE7D4B2),size:36),SizedBox(height:13),Text('Kahve molan,\\navantajın olsun.',style:TextStyle(color:Colors.white,fontSize:29,fontWeight:FontWeight.w900)),SizedBox(height:10),Text('Kafeleri keşfet, kampanyaları yakala, sadakat kartlarını takip et.',style:TextStyle(color:Colors.white70))])),Row(children:[const Expanded(child:H2('Öne çıkan kafeler')),TextButton(onPressed:()=>go(1),child:const Text('Tümünü gör'))]),...cafes.take(3).map((a)=>CafeTile(a,()=>open(a))),const H2('Günün kampanyaları'),const DealTile('Öğrenci indirimi','Seçili içeceklerde %15 indirim',Icons.school),const DealTile('Tatlı molası','Kahve yanında tatlı fırsatı',Icons.cake),const SizedBox(height:12),const Notice()]);}
+class CafeTile extends StatelessWidget{final Cafe a;final VoidCallback tap;const CafeTile(this.a,this.tap,{super.key});@override Widget build(BuildContext x)=>Card(child:ListTile(leading:CircleAvatar(backgroundColor:c,child:Icon(a.icon,color:g)),title:Text(a.name,style:const TextStyle(fontWeight:FontWeight.bold)),subtitle:Text(a.city+' • '+a.type),trailing:const Icon(Icons.chevron_right),onTap:tap));}
+class ListC extends StatefulWidget{final ValueChanged<Cafe> open;const ListC({required this.open,super.key});@override State<ListC> createState()=>LC();}
+class LC extends State<ListC>{String q='',city='Tümü';@override Widget build(BuildContext x){final cities=['Tümü',...cafes.map((e)=>e.city).toSet()];final rows=cafes.where((a)=>(city=='Tümü'||a.city==city)&&(a.name.toLowerCase().contains(q.toLowerCase())||a.type.toLowerCase().contains(q.toLowerCase())));return ListView(padding:const EdgeInsets.all(20),children:[const Head('Kafeleri keşfet','Şehir ve kategoriye göre ara.'),TextField(onChanged:(v)=>setState(()=>q=v),decoration:const InputDecoration(prefixIcon:Icon(Icons.search),hintText:'Kafe ara',filled:true,fillColor:Colors.white)),Wrap(spacing:6,children:cities.map((v)=>ChoiceChip(label:Text(v),selected:city==v,onSelected:(_)=>setState(()=>city=v))).toList()),...rows.map((a)=>CafeTile(a,()=>widget.open(a)))]);}}
+class Detail extends StatelessWidget{final Cafe a;const Detail(this.a,{super.key});@override Widget build(BuildContext x)=>Scaffold(appBar:AppBar(title:const Text('Kafe detayları')),body:ListView(padding:const EdgeInsets.all(22),children:[Container(height:140,decoration:BoxDecoration(color:g,borderRadius:BorderRadius.circular(22)),child:Icon(a.icon,color:c,size:65)),const SizedBox(height:18),Text(a.name,style:const TextStyle(color:g,fontSize:28,fontWeight:FontWeight.w900)),Text(a.city+' • '+a.type),const H2('Sadakat ödülü'),Text(a.reward),const SizedBox(height:20),const Notice()]));}
+class Cards extends StatelessWidget{final Map<String,int> stamps;final VoidCallback scan;const Cards({required this.stamps,required this.scan,super.key});@override Widget build(BuildContext x)=>ListView(padding:const EdgeInsets.all(20),children:[const Head('Kartlarım','Her kafenin damga kartı ayrıdır.'),...cafes.map((a)=>Card(child:Padding(padding:const EdgeInsets.all(15),child:Column(children:[Row(children:[Expanded(child:Text(a.name,style:const TextStyle(fontWeight:FontWeight.bold))),Text((stamps[a.name]??0).toString()+'/'+a.goal.toString())]),const SizedBox(height:12),Row(children:List.generate(a.goal,(i)=>Expanded(child:Container(height:27,margin:const EdgeInsets.all(3),decoration:BoxDecoration(shape:BoxShape.circle,color:i<(stamps[a.name]??0)?g:c),child:Icon(i<(stamps[a.name]??0)?Icons.check:Icons.coffee,size:14,color:i<(stamps[a.name]??0)?Colors.white:b))))),Text(a.reward)])))),FilledButton.icon(onPressed:scan,icon:const Icon(Icons.qr_code_scanner),label:const Text('QR kod tara')),const Notice()]);}
+class Scanner extends StatefulWidget{const Scanner({super.key});@override State<Scanner> createState()=>SS();}
+class SS extends State<Scanner>{String? code;@override Widget build(BuildContext x)=>Scaffold(appBar:AppBar(title:const Text('QR kod tara')),body:Column(children:[Expanded(child:MobileScanner(onDetect:(v){final z=v.barcodes;if(code==null&&z.isNotEmpty)setState(()=>code=z.first.rawValue);})),Padding(padding:const EdgeInsets.all(20),child:Text(code==null?'Kafenin QR kodunu tara.':'Okunan kod: '+code!+'\\nBu demo sürümünde damga eklenmez; güvenli doğrulama için sunucu gerekir.',textAlign:TextAlign.center))]));}
+class Deals extends StatelessWidget{final Set<String> saved;final ValueChanged<String> toggle;const Deals({required this.saved,required this.toggle,super.key});@override Widget build(BuildContext x)=>ListView(padding:const EdgeInsets.all(20),children:[const Head('Fırsatlar','Öğrenci indirimleri ve kampanyalar.'),const DealTile('Öğrenci fırsatı','Seçili içeceklerde %15 indirim',Icons.school),const DealTile('Tatlı molası','Kahve yanında seçili tatlılarda fırsat',Icons.cake),const DealTile('Sadakat ödülü','Damgalarını tamamla, ödülünü kazan',Icons.card_giftcard),const H2('Kaydedilenler'),...saved.map((v)=>ListTile(title:Text(v),trailing:IconButton(onPressed:()=>toggle(v),icon:const Icon(Icons.bookmark_remove)))),const Notice()]);}
+class DealTile extends StatelessWidget{final String title,desc;final IconData icon;const DealTile(this.title,this.desc,this.icon,{super.key});@override Widget build(BuildContext x)=>Card(child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFE8DCC7),child:Icon(icon,color:b)),title:Text(title,style:const TextStyle(fontWeight:FontWeight.bold)),subtitle:Text(desc)));}
+class Profile extends StatelessWidget{const Profile({super.key});@override Widget build(BuildContext x)=>ListView(padding:const EdgeInsets.all(20),children:[const Head('Profilim','Hesap ve destek.'),const Center(child:CircleAvatar(radius:40,backgroundColor:g,child:Icon(Icons.person,color:c,size:42))),const SizedBox(height:12),const Text('Cafe Dünyam kullanıcısı',textAlign:TextAlign.center),const H2('Yardım ve destek'),const ExpansionTile(title:Text('Damgalar her kafede geçerli mi?'),children:[ListTile(title:Text('Hayır. Her kafenin kartı ayrıdır.'))]),const ExpansionTile(title:Text('QR okutunca damga gelir mi?'),children:[ListTile(title:Text('Demo sürümünde hayır; güvenli doğrulama gerekir.'))]),const Notice()]);}
+class Notice extends StatelessWidget{const Notice({super.key});@override Widget build(BuildContext x)=>Container(padding:const EdgeInsets.all(13),decoration:BoxDecoration(color:const Color(0xFFE8DCC7),borderRadius:BorderRadius.circular(13)),child:const Text('Veritabanı olmayan demo: örnek veriler uygulama içinde tanımlıdır. Gerçek hesap, cihazlar arası eşitleme ve güvenli damga doğrulaması yoktur.',style:TextStyle(color:g,fontSize:12,height:1.4)));}
