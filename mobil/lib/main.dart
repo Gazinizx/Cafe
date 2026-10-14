@@ -86,8 +86,17 @@ class _GatePageState extends State<GatePage> {
     }
   }
   void _open(Map<String,dynamic> user) {
-    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => user['role'] == 'business'
-      ? BusinessShell(user: user) : CustomerShell(user: user)));
+    final Widget page;
+    if (user['role'] == 'admin') {
+      page = AdminShell(user: user);
+    } else if (user['role'] == 'business' && user['approvalStatus'] != 'approved') {
+      page = BusinessReviewPage(user: user);
+    } else if (user['role'] == 'business') {
+      page = BusinessShell(user: user);
+    } else {
+      page = CustomerShell(user: user);
+    }
+    Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => page));
   }
   @override Widget build(BuildContext context) => loading
     ? const Scaffold(body: Center(child: CircularProgressIndicator()))
@@ -111,6 +120,7 @@ class WelcomePage extends StatelessWidget {
     OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: true, initialRole: 'business', onDone: onDone))), icon: const Icon(Icons.storefront_outlined), label: const Text('İşletmeyim')),
     const SizedBox(height: 8),
     TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: false, onDone: onDone))), icon: const Icon(Icons.login), label: const Text('Hesabım var — giriş yap')),
+    TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: false, onDone: onDone))), child: const Text('Yönetici demo girişi')),
     const SizedBox(height: 20), const LocalModeNote(),
   ])));
 }
@@ -173,6 +183,9 @@ class _AuthPageState extends State<AuthPage> {
         'name': name.text.trim(), 'email': mail, 'password': password.text,
         'role': role, 'cafeName': cafeName.text.trim(), 'city': province.text.trim(),
         if (role == 'business') ...{
+          'approvalStatus': 'pending',
+          'applicationStatus': 'Başvurunuz inceleniyor',
+          'applicationSubmittedAt': DateTime.now().toIso8601String(),
           'phone': phone.text.trim(), 'businessType': businessType.text.trim(),
           'taxOffice': taxOffice.text.trim(), 'taxNumber': taxNumber.text.trim(),
           'province': province.text.trim(), 'district': district.text.trim(),
@@ -193,6 +206,17 @@ class _AuthPageState extends State<AuthPage> {
       await p.setString(sessionKey, mail);
       if (mounted) widget.onDone(user);
     } else {
+      if (mail == 'admin@cafedunyam.local' && password.text == 'CafeAdmin123!') {
+        final admin = <String,dynamic>{'name':'Cafe Dünyam Yönetici','email':mail,'password':password.text,'role':'admin','approvalStatus':'approved'};
+        final existing = users.indexWhere((u) => u['email'] == mail);
+        if (existing >= 0) { users[existing] = admin; } else { users.add(admin); }
+        await LocalData.saveList(usersKey, users);
+        final p = await SharedPreferences.getInstance();
+        await p.setString(sessionKey, mail);
+        if (mounted) widget.onDone(admin);
+        if (mounted) setState(() => busy = false);
+        return;
+      }
       final matches = users.where((u) => u['email'] == mail && u['password'] == password.text).toList();
       if (matches.isEmpty) {
         setState(() => busy = false);
@@ -265,12 +289,10 @@ class _AuthPageState extends State<AuthPage> {
           TextFormField(controller: deliveryDistrict, decoration: const InputDecoration(labelText: 'Teslimat ilçesi'), validator: (v) => requiredText(v, 'Teslimat ilçesi')),
           const SizedBox(height: 12),
           TextFormField(controller: deliveryAddress, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Teslimat açık adresi'), validator: (v) => requiredText(v, 'Teslimat adresi')),
-          sectionTitle('IBAN ile ödeme — demo'),
-          Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFFFFE8C2), borderRadius: BorderRadius.circular(14)), child: const Text('ÖRNEK BİLGİLER — GERÇEK ÖDEME YAPMA. IBAN ve hesap sahibi temsili yer tutuculardır; gerçek hesap bilgisi henüz girilmedi. Havale/EFT ve ödeme onayı otomatik çalışmaz.')),
+          sectionTitle('Ödeme bilgileri'),
+          Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFFE8DCC7), borderRadius: BorderRadius.circular(14)), child: const Text('IBAN ve ödeme talimatları işletme başvurusu onaylandıktan sonra gösterilecektir. Şimdilik sipariş talebin incelemeye alınır.')),
           const SizedBox(height: 10),
-          const SelectableText('Hesap sahibi: CAFE DÜNYAM (ÖRNEK)\nIBAN: TR00 0000 0000 0000 0000 0000 00\nAçıklama: İşletme adı + e-posta'),
-          const SizedBox(height: 10),
-          const Text('Kayıt ve sipariş bu cihazda yerel taslak olarak saklanır; bize otomatik gönderilmez.'),
+          const Text('Başvuru ve sipariş bu cihazda yerel taslak olarak saklanır; yöneticiye otomatik gönderilmez.'),
         ] else ...[
           sectionTitle('Müşteri bilgileri'),
         ],
@@ -469,24 +491,73 @@ class BusinessDashboard extends StatelessWidget{
  const LocalModeNote(),
  ]);
 }
-class BusinessDeals extends StatefulWidget{final Map<String,dynamic> user;const BusinessDeals({required this.user,super.key});@override State<BusinessDeals> createState()=>_BusinessDealsState();}
-class _BusinessDealsState extends State<BusinessDeals>{
- final title=TextEditingController(),benefit=TextEditingController();String audience='Herkes';bool busy=false;
- @override void dispose(){title.dispose();benefit.dispose();super.dispose();}
- Future<void> _add()async{if(title.text.trim().isEmpty||benefit.text.trim().isEmpty)return;setState(()=>busy=true);final deals=await LocalData.list(dealsKey,starterDeals);deals.insert(0,{'id':'local-${DateTime.now().microsecondsSinceEpoch}','title':title.text.trim(),'benefit':benefit.text.trim(),'audience':audience,'cafeId':'','active':true,'ownerEmail':widget.user['email']});await LocalData.saveList(dealsKey,deals);title.clear();benefit.clear();if(mounted)setState(()=>busy=false);}
- Future<void> _toggle(Map<String,dynamic> d)async{final deals=await LocalData.list(dealsKey,starterDeals);final i=deals.indexWhere((x)=>x['id']==d['id']);if(i>=0){deals[i]['active']=!(deals[i]['active']==true);await LocalData.saveList(dealsKey,deals);if(mounted)setState(()=>{});}}
- Future<void> _delete(String id)async{final deals=await LocalData.list(dealsKey,starterDeals);deals.removeWhere((d)=>d['id']==id);await LocalData.saveList(dealsKey,deals);if(mounted)setState(()=>{});}
- @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
- const Heading('Kampanyalar','Bu cihazdaki örnek kampanyaları yönet.'),
- TextField(controller:title,decoration:const InputDecoration(labelText:'Kampanya başlığı')),
- const SizedBox(height:10),TextField(controller:benefit,decoration:const InputDecoration(labelText:'İndirim / avantaj açıklaması')),
- const SizedBox(height:10),DropdownButtonFormField<String>(value:audience,decoration:const InputDecoration(labelText:'Hedef kitle'),items:const[DropdownMenuItem(value:'Herkes',child:Text('Herkes')),DropdownMenuItem(value:'Öğrenci',child:Text('Öğrenci')),DropdownMenuItem(value:'Yeni müşteriler',child:Text('Yeni müşteriler'))],onChanged:(v)=>setState(()=>audience=v??'Herkes')),
- const SizedBox(height:12),FilledButton.icon(onPressed:busy?null:_add,icon:const Icon(Icons.add),label:Text(busy?'Kaydediliyor…':'Kampanya taslağı oluştur')),
- const SizedBox(height:16),const Text('Kayıtlı kampanyalar',style:TextStyle(fontWeight:FontWeight.bold,fontSize:19)),
- FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(dealsKey,starterDeals),builder:(context,s){if(!s.hasData)return const Center(child:CircularProgressIndicator());return Column(children:s.data!.map((d)=>Card(child:ListTile(title:Text('${d['title']}'),subtitle:Text('${d['benefit']}\nDurum: ${d['active']==true?'Aktif (yerel)':'Pasif'}'),isThreeLine:true,trailing:PopupMenuButton<String>(onSelected:(v)=>v=='toggle'?_toggle(d):_delete('${d['id']}'),itemBuilder:(_)=>const[PopupMenuItem(value:'toggle',child:Text('Aktif / pasif değiştir')),PopupMenuItem(value:'delete',child:Text('Sil'))])))).toList());}),
- const LocalModeNote(),
- ]);
+class BusinessDeals extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const BusinessDeals({required this.user, super.key});
+  @override State<BusinessDeals> createState() => _BusinessDealsState();
 }
+class _BusinessDealsState extends State<BusinessDeals> {
+  final title = TextEditingController(), benefit = TextEditingController();
+  String audience = 'Herkes';
+  bool busy = false;
+  @override void dispose() { title.dispose(); benefit.dispose(); super.dispose(); }
+  bool _canManage(Map<String,dynamic> d) => widget.user['role'] == 'admin' || d['ownerEmail'] == widget.user['email'];
+  Future<void> _add() async {
+    if (title.text.trim().isEmpty || benefit.text.trim().isEmpty) return;
+    setState(() => busy = true);
+    final deals = await LocalData.list(dealsKey, starterDeals);
+    deals.insert(0, {'id':'local-${DateTime.now().microsecondsSinceEpoch}','title':title.text.trim(),'benefit':benefit.text.trim(),'audience':audience,'cafeId':widget.user['cafeId'] ?? widget.user['email'],'active':true,'ownerEmail':widget.user['email'],'ownerName':widget.user['cafeName'] ?? widget.user['name']});
+    await LocalData.saveList(dealsKey, deals);
+    title.clear(); benefit.clear();
+    if (mounted) setState(() => busy = false);
+  }
+  Future<void> _toggle(Map<String,dynamic> d) async {
+    if (!_canManage(d)) return;
+    final deals = await LocalData.list(dealsKey, starterDeals);
+    final i = deals.indexWhere((x) => x['id'] == d['id']);
+    if (i >= 0) { deals[i]['active'] = !(deals[i]['active'] == true); await LocalData.saveList(dealsKey, deals); if (mounted) setState(() {}); }
+  }
+  Future<void> _delete(String id) async {
+    final deals = await LocalData.list(dealsKey, starterDeals);
+    final target = deals.where((d) => d['id'] == id).toList();
+    if (target.isEmpty || !_canManage(target.first)) return;
+    deals.removeWhere((d) => d['id'] == id);
+    await LocalData.saveList(dealsKey, deals);
+    if (mounted) setState(() {});
+  }
+  @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
+    const Heading('Kampanyalar', 'Yalnızca kendi kampanyalarını yönetebilirsin.'),
+    TextField(controller: title, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
+    const SizedBox(height: 10),
+    TextField(controller: benefit, decoration: const InputDecoration(labelText: 'İndirim / avantaj açıklaması')),
+    const SizedBox(height: 10),
+    DropdownButtonFormField<String>(value: audience, decoration: const InputDecoration(labelText: 'Hedef kitle'), items: const [
+      DropdownMenuItem(value: 'Herkes', child: Text('Herkes')),
+      DropdownMenuItem(value: 'Öğrenci', child: Text('Öğrenci')),
+      DropdownMenuItem(value: 'Yeni müşteriler', child: Text('Yeni müşteriler')),
+    ], onChanged: (v) => setState(() => audience = v ?? 'Herkes')),
+    const SizedBox(height: 12),
+    FilledButton.icon(onPressed: busy ? null : _add, icon: const Icon(Icons.add), label: Text(busy ? 'Kaydediliyor…' : 'Kampanya oluştur')),
+    const SizedBox(height: 16),
+    const Text('Yönetebildiğin kampanyalar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19)),
+    FutureBuilder<List<Map<String,dynamic>>>(future: LocalData.list(dealsKey, starterDeals), builder: (context, s) {
+      if (!s.hasData) return const Center(child: CircularProgressIndicator());
+      final visible = s.data!.where((d) => _canManage(d)).toList();
+      if (visible.isEmpty) return const Padding(padding: EdgeInsets.all(12), child: Text('Henüz sana ait kampanya yok.'));
+      return Column(children: visible.map((d) => Card(child: ListTile(
+        title: Text('${d['title']}'),
+        subtitle: Text('${d['benefit']}\\nDurum: ${d['active'] == true ? 'Aktif (yerel)' : 'Pasif'}'),
+        isThreeLine: true,
+        trailing: PopupMenuButton<String>(onSelected: (v) => v == 'toggle' ? _toggle(d) : _delete('${d['id']}'), itemBuilder: (_) => const [
+          PopupMenuItem(value: 'toggle', child: Text('Aktif / pasif değiştir')),
+          PopupMenuItem(value: 'delete', child: Text('Sil')),
+        ]),
+      ))).toList());
+    }),
+    const LocalModeNote(),
+  ]);
+}
+
 class BusinessSettings extends StatelessWidget{
  final Map<String,dynamic> user;const BusinessSettings({required this.user,super.key});
  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
@@ -498,4 +569,151 @@ class BusinessSettings extends StatelessWidget{
  const LocalModeNote(),
  const Text('Önemli: Bu ekranlar test için çalışır. İşletme sahipliği doğrulaması, gerçek satış onayı, sunucu, cihazlar arası eşitleme ve güvenli kullanıcı yetkilendirmesi bu yerel sürümde bulunmaz.'),
  ]);
+}
+
+class BusinessReviewPage extends StatelessWidget {
+  final Map<String,dynamic> user;
+  const BusinessReviewPage({required this.user, super.key});
+  Future<void> _logout(BuildContext context) async {
+    final p = await SharedPreferences.getInstance();
+    await p.remove(sessionKey);
+    if (context.mounted) Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const GatePage()), (r) => false);
+  }
+  @override Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Başvuru durumu'), actions: [IconButton(onPressed: () => _logout(context), icon: const Icon(Icons.logout))]),
+    body: SafeArea(child: ListView(padding: const EdgeInsets.all(24), children: [
+      const SizedBox(height: 24),
+      const Icon(Icons.hourglass_top_rounded, size: 72, color: forest),
+      const SizedBox(height: 20),
+      const Text('Başvurunuz inceleniyor', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: forest)),
+      const SizedBox(height: 12),
+      const Text('İşletme başvurunuz alındı. Yönetici onayı gelene kadar işletme ana sayfasına geçemezsiniz. Onaydan sonra sipariş ve ödeme talimatları gösterilecektir.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+      const SizedBox(height: 24),
+      Card(child: ListTile(leading: const Icon(Icons.storefront, color: forest), title: Text('${user['cafeName'] ?? 'İşletmeniz'}'), subtitle: Text('${user['email']}'))),
+      Card(child: ListTile(leading: const Icon(Icons.inventory_2_outlined, color: forest), title: const Text('NFC tag siparişi'), subtitle: Text('${user['tagCount'] ?? 0} adet • Onay sonrası ödeme bilgileri'))),
+      const SizedBox(height: 12),
+      const LocalModeNote(),
+    ])),
+  );
+}
+class AdminShell extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const AdminShell({required this.user, super.key});
+  @override State<AdminShell> createState() => _AdminShellState();
+}
+class _AdminShellState extends State<AdminShell> {
+  int tab = 0;
+  @override Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Cafe Dünyam • Yönetici')),
+    body: IndexedStack(index: tab, children: const [AdminApplications(), AdminCampaigns()]),
+    bottomNavigationBar: NavigationBar(selectedIndex: tab, onDestinationSelected: (i) => setState(() => tab = i), destinations: const [
+      NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: 'Başvurular'),
+      NavigationDestination(icon: Icon(Icons.campaign_outlined), label: 'Kampanyalar'),
+    ]),
+  );
+}
+class AdminApplications extends StatefulWidget {
+  const AdminApplications({super.key});
+  @override State<AdminApplications> createState() => _AdminApplicationsState();
+}
+class _AdminApplicationsState extends State<AdminApplications> {
+  Future<void> _setStatus(Map<String,dynamic> target, String status) async {
+    final users = await LocalData.list(usersKey, []);
+    final i = users.indexWhere((u) => u['email'] == target['email']);
+    if (i < 0) return;
+    users[i]['approvalStatus'] = status;
+    users[i]['applicationStatus'] = status == 'approved' ? 'Onaylandı' : status == 'rejected' ? 'Reddedildi' : 'Başvurunuz inceleniyor';
+    await LocalData.saveList(usersKey, users);
+    final orders = await LocalData.list(businessOrdersKey, []);
+    final oi = orders.indexWhere((o) => o['businessEmail'] == target['email']);
+    if (oi >= 0) {
+      orders[oi]['orderStatus'] = status == 'approved' ? 'Onaylandı — ödeme bekliyor' : status == 'rejected' ? 'Başvuru reddedildi' : 'İncelemede';
+      orders[oi]['paymentStatus'] = status == 'approved' ? 'Ödeme bilgileri gösterilebilir' : 'Ödeme kapalı';
+      await LocalData.saveList(businessOrdersKey, orders);
+    }
+    if (mounted) setState(() {});
+  }
+  @override Widget build(BuildContext context) => FutureBuilder<List<Map<String,dynamic>>>(
+    future: LocalData.list(usersKey, []),
+    builder: (context, s) {
+      if (!s.hasData) return const Center(child: CircularProgressIndicator());
+      final pending = s.data!.where((u) => u['role'] == 'business' && u['approvalStatus'] != 'approved' && u['approvalStatus'] != 'rejected').toList();
+      final rejected = s.data!.where((u) => u['role'] == 'business' && u['approvalStatus'] == 'rejected').toList();
+      return ListView(padding: const EdgeInsets.all(18), children: [
+        const Heading('İşletme başvuruları', 'Başvuruları incele ve onayla.'),
+        if (pending.isEmpty) const Text('Bekleyen başvuru yok.'),
+        ...pending.map((u) => Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${u['cafeName']}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+          Text('${u['name']} • ${u['email']}'),
+          Text('${u['phone'] ?? ''} • ${u['province'] ?? ''} / ${u['district'] ?? ''}'),
+          Text('${u['businessAddress'] ?? ''}'),
+          Text('NFC tag: ${u['tagCount'] ?? 0} adet • Örnek toplam: ${(u['nfcOrder'] as Map?)?['totalTry'] ?? 0} TL'),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: FilledButton(onPressed: () => _setStatus(u, 'approved'), child: const Text('Onayla'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton(onPressed: () => _setStatus(u, 'rejected'), child: const Text('Reddet'))),
+          ]),
+        ])))),
+        if (rejected.isNotEmpty) const Padding(padding: EdgeInsets.only(top: 12), child: Text('Reddedilen başvurular', style: TextStyle(fontWeight: FontWeight.w800))),
+        ...rejected.map((u) => ListTile(title: Text('${u['cafeName']}'), subtitle: Text('${u['email']} • Reddedildi'), trailing: TextButton(onPressed: () => _setStatus(u, 'pending'), child: const Text('Yeniden incele')))),
+        const LocalModeNote(),
+      ]);
+    },
+  );
+}
+class AdminCampaigns extends StatefulWidget {
+  const AdminCampaigns({super.key});
+  @override State<AdminCampaigns> createState() => _AdminCampaignsState();
+}
+class _AdminCampaignsState extends State<AdminCampaigns> {
+  Future<void> _toggle(Map<String,dynamic> d) async {
+    final deals = await LocalData.list(dealsKey, starterDeals);
+    final i = deals.indexWhere((x) => x['id'] == d['id']);
+    if (i >= 0) { deals[i]['active'] = !(deals[i]['active'] == true); await LocalData.saveList(dealsKey, deals); if (mounted) setState(() {}); }
+  }
+  Future<void> _delete(String id) async {
+    final deals = await LocalData.list(dealsKey, starterDeals);
+    deals.removeWhere((d) => d['id'] == id);
+    await LocalData.saveList(dealsKey, deals);
+    if (mounted) setState(() {});
+  }
+  Future<void> _edit(Map<String,dynamic> d) async {
+    final title = TextEditingController(text: '${d['title']}');
+    final benefit = TextEditingController(text: '${d['benefit']}');
+    final result = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Kampanyayı düzenle'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: title, decoration: const InputDecoration(labelText: 'Başlık')),
+        TextField(controller: benefit, decoration: const InputDecoration(labelText: 'Avantaj')),
+      ]),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Kaydet'))],
+    ));
+    if (result == true && title.text.trim().isNotEmpty && benefit.text.trim().isNotEmpty) {
+      final deals = await LocalData.list(dealsKey, starterDeals);
+      final i = deals.indexWhere((x) => x['id'] == d['id']);
+      if (i >= 0) { deals[i]['title'] = title.text.trim(); deals[i]['benefit'] = benefit.text.trim(); await LocalData.saveList(dealsKey, deals); if (mounted) setState(() {}); }
+    }
+    title.dispose(); benefit.dispose();
+  }
+  @override Widget build(BuildContext context) => FutureBuilder<List<Map<String,dynamic>>>(
+    future: LocalData.list(dealsKey, starterDeals),
+    builder: (context, s) {
+      if (!s.hasData) return const Center(child: CircularProgressIndicator());
+      return ListView(padding: const EdgeInsets.all(18), children: [
+        const Heading('Tüm kampanyalar', 'Yönetici tüm işletmelerin kampanyalarını düzenleyebilir.'),
+        ...s.data!.map((d) => Card(child: ListTile(
+          title: Text('${d['title']}'),
+          subtitle: Text('${d['benefit']} • Sahip: ${d['ownerName'] ?? d['ownerEmail'] ?? d['cafeId'] ?? 'Belirtilmemiş'}'),
+          isThreeLine: true,
+          trailing: PopupMenuButton<String>(onSelected: (v) { if (v == 'toggle') _toggle(d); else if (v == 'edit') _edit(d); else _delete('${d['id']}'); }, itemBuilder: (_) => const [
+            PopupMenuItem(value: 'edit', child: Text('Düzenle')),
+            PopupMenuItem(value: 'toggle', child: Text('Aktif / pasif')),
+            PopupMenuItem(value: 'delete', child: Text('Sil')),
+          ]),
+        ))),
+        const LocalModeNote(),
+      ]);
+    },
+  );
 }
