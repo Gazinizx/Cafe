@@ -27,7 +27,7 @@ Future<Map<String, dynamic>> cloudProfile(User authUser) async {
   final user = <String, dynamic>{
     'id': authUser.id,
     'name': (row?['full_name'] ?? meta['full_name'] ?? authUser.email ?? 'Kullanıcı').toString(),
-    'email': authUser.email ?? '',
+    'email': (row?['email'] ?? authUser.email ?? '').toString(),
     'role': role,
     'approvalStatus': (row?['approval_status'] ?? (role == 'business' ? 'pending' : 'approved')).toString(),
     'cloudAccount': true,
@@ -181,7 +181,7 @@ class LocalData {
           final r = Map<String,dynamic>.from(raw as Map);
           final app = appById[r['id']] ?? <String,dynamic>{};
           return <String,dynamic>{
-            'id': r['id'], 'name': r['full_name'], 'email': '',
+            'id': r['id'], 'name': r['full_name'], 'email': r['email'] ?? '',
             'role': r['role'], 'approvalStatus': r['approval_status'],
             'cafeName': app['cafe_name'] ?? r['full_name'],
             'phone': app['phone'] ?? '', 'businessType': app['business_type'] ?? '',
@@ -434,7 +434,29 @@ class _AuthPageState extends State<AuthPage> {
         final response = await cloud.auth.signUp(
           email: mail,
           password: password.text,
-          data: {'full_name': name.text.trim(), 'role': role},
+          data: {
+            'full_name': name.text.trim(),
+            'role': role,
+            if (role == 'business') ...{
+              'cafe_name': cafeName.text.trim(),
+              'phone': phone.text.trim(),
+              'business_type': businessType.text.trim(),
+              'tax_office': taxOffice.text.trim(),
+              'tax_number': taxNumber.text.trim(),
+              'province': province.text.trim(),
+              'district': district.text.trim(),
+              'business_address': address.text.trim(),
+              'delivery_name': deliveryName.text.trim(),
+              'delivery_phone': deliveryPhone.text.trim(),
+              'delivery_province': deliveryProvince.text.trim(),
+              'delivery_district': deliveryDistrict.text.trim(),
+              'delivery_address': deliveryAddress.text.trim(),
+              'tag_count': '$tagCount',
+              'package_price_try': '${packagePrices[tagCount] ?? 0}',
+              'shipping_try': '$shippingPrice',
+              'order_total_try': '$orderTotal',
+            },
+          },
         );
         final authUser = response.user;
         if (authUser == null) throw const AuthException('Hesap oluşturulamadı. Lütfen tekrar dene.');
@@ -464,20 +486,16 @@ class _AuthPageState extends State<AuthPage> {
           return;
         }
         if (role == 'business') {
-          final order = <String,dynamic>{
+          user['cafeId'] = (await cloud.from('cafes').select('id').eq('owner_id', authUser.id).single())['id'];
+          user['nfcOrder'] = {
             'businessName': cafeName.text.trim(), 'tagCount': tagCount,
-            'packagePriceTry': packagePrices[tagCount], 'shippingTry': shippingPrice,
+            'packagePriceTry': packagePrices[tagCount] ?? 0, 'shippingTry': shippingPrice,
             'totalTry': orderTotal, 'paymentMethod': 'IBAN havale/EFT',
-            'paymentStatus': 'Ödeme bekleniyor', 'orderStatus': 'Başvuru inceleniyor',
+            'paymentStatus': 'Ödeme bekliyor', 'orderStatus': 'Başvuru inceleniyor',
             'recipientName': deliveryName.text.trim(), 'recipientPhone': deliveryPhone.text.trim(),
             'province': deliveryProvince.text.trim(), 'district': deliveryDistrict.text.trim(),
             'address': deliveryAddress.text.trim(), 'createdAt': DateTime.now().toIso8601String(),
           };
-          await cloud.from('business_orders').insert({
-            'business_id': authUser.id, 'order_data': order,
-            'order_status': 'pending', 'payment_status': 'pending',
-          });
-          user['nfcOrder'] = order;
         }
         final p = await SharedPreferences.getInstance();
         await p.remove(sessionKey);
