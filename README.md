@@ -1,19 +1,24 @@
 # Cafe Dünyam
 
-Flutter mobil uygulaması ve tarayıcıda çalışan örnek yönetim paneli.
+Flutter Android uygulaması ve tarayıcıda çalışan yerel yönetim paneli.
 
-- `mobil/`: Android Flutter uygulaması.
-- `yonetim/index.html`: kafeler ve kampanyalar için yerel yönetim paneli.
-- `.github/workflows/android-apk.yml`: GitHub Actions APK derlemesi.
+- `mobil/`: müşteri ve işletme akışları olan Flutter uygulaması.
+- `yonetim/index.html`: tarayıcı içinde çalışan örnek kafe/kampanya paneli.
+- `.github/workflows/android-apk.yml`: Android APK derleme iş akışı.
 
-## Veritabanı olmadan yerel test
+## Bu sürümde uygulamadaki yerel akışlar
 
-- Kafe ve kampanya içerikleri şu an örnek veridir.
-- Damga kartları ve kaydedilen fırsatlar cihazdaki `SharedPreferences` içinde tutulur; uygulama yeniden açıldığında aynı cihazda korunur.
-- Veriler başka telefona aktarılmaz ve yönetim paneliyle eşitlenmez.
-- NFC okuma, örnek/sabit NDEF kodlarını tanır. Bu yöntem kopyalanabileceği için gerçek alışverişi veya işletmeyi güvenli biçimde doğrulamaz; gerçek sadakat programında sunucu tarafı doğrulama gerekir.
-- Profil ekranı yerel test modunu belirtir; gerçek hesap/üyelik bağlantısı yoktur.
+- Müşteri ve işletme rolüyle hesap oluşturma, giriş ve çıkış.
+- Müşteri ana sayfası, kafe arama/şehir filtresi, kafe detayları, sadakat kartı görünümü, kampanya kaydetme ve profil.
+- İşletme paneli, yerel kampanya taslağı oluşturma, kampanyayı aktif/pasif yapma ve silme.
+- Kafe/kampanya listeleri, profil ve oturum bilgileri cihazdaki SharedPreferences içinde tutulur.
 
-## Android APK
+## Önemli sınırlar
 
-GitHub > Actions > Cafe Dunyam Android APK > Run workflow seç. Başarılı derlemenin Artifacts bölümünden `cafe-dunyam-android-apk` dosyasını indir.
+Bu bir **yerel prototiptir**, yayın için hazır üretim sistemi değildir. Hesaplar ve veriler yalnızca aynı cihazda saklanır; başka telefonla, tarayıcı paneliyle veya başka kullanıcıyla senkronize olmaz. Yerel parola saklama yöntemi gerçek kullanıcı hesapları için güvenli değildir; gerçek sürümden önce sunucu tabanlı kimlik doğrulama gerekir.
+
+İşletme hesabı/şube sahipliği doğrulaması, güvenli yetkilendirme, gerçek alışverişi doğrulayan sunucu işlemi, sahteciliğe dayanıklı damga verme, kampanyaların cihazlar arası dağıtımı ve gerçek müşteri-işletme bağlantısı bu sürümde yoktur. Sadakat kartı ekranı yalnızca yerel örnek durumu gösterir; gerçek alışverişe karşılık damga verildiğini garanti etmez. Örnek kafe ve kampanya verileri gerçek işletme ortaklığı anlamına gelmez.
+
+## APK oluşturma
+
+GitHub deposunda **Actions → Cafe Dunyam Android APK** bölümünden derleme çalıştırmasını açın. Başarılı iş akışının Artifacts bölümünde `cafe-dunyam-android-apk` dosyası görünür. Derleme sonucu doğrulanmadan APK'nın başarıyla üretildiği varsayılmamalıdır.
