@@ -196,7 +196,6 @@ class LocalData {
         }).toList();
       }
       if (key == businessOrdersKey) {
-        final query = cloud.from('business_orders').select();
         final rows = isAdmin
           ? await cloud.from('business_orders').select('*, profiles(email, full_name)').order('created_at', ascending: false)
           : await cloud.from('business_orders').select().eq('business_id', auth.id).order('created_at', ascending: false);
@@ -768,7 +767,7 @@ class ProfilePage extends StatelessWidget{final Map<String,dynamic> user;const P
  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
  const Heading('Profil','Hesap bilgilerin ve uygulama ayarları.'),
  Card(child:ListTile(leading:const CircleAvatar(child:Icon(Icons.person)),title:Text('${user['name']}'),subtitle:Text('${user['email']}'))),
- const Card(child:ListTile(leading:Icon(Icons.phone_android,color:forest),title:Text('Yerel test hesabı'),subtitle:Text('Bu cihazda kayıtlı; çevrim içi kimlik doğrulaması yok.'))),
+ Card(child:ListTile(leading:const Icon(Icons.cloud_done,color:forest),title:Text(user['cloudAccount'] == true ? 'Bulut hesabı' : 'Deneme hesabı'),subtitle:Text(user['cloudAccount'] == true ? 'Hesabın Supabase ile bağlı.' : 'Bu deneme hesabı yalnızca bu cihazda çalışır.'))),
  const SizedBox(height:12),OutlinedButton.icon(onPressed:()=>_logout(context),icon:const Icon(Icons.logout),label:const Text('Çıkış yap')),
  ]);
 }
@@ -791,7 +790,7 @@ class BusinessDashboard extends StatelessWidget{
  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
  Heading('Merhaba, ${user['name']}','İşletme yönetim panelin.'),
  Container(padding:const EdgeInsets.all(20),decoration:BoxDecoration(color:forest,borderRadius:BorderRadius.circular(22)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
- const Icon(Icons.storefront,color:cream,size:35),const SizedBox(height:12),Text('${user['cafeName']}',style:const TextStyle(color:Colors.white,fontSize:25,fontWeight:FontWeight.w900)),Text('${user['city']}',style:const TextStyle(color:Colors.white70)),const SizedBox(height:12),const Text('İşletme profili yerel taslaktır; doğrulanmış işletme hesabı değildir.',style:TextStyle(color:Colors.white70)),
+ const Icon(Icons.storefront,color:cream,size:35),const SizedBox(height:12),Text('${user['cafeName']}',style:const TextStyle(color:Colors.white,fontSize:25,fontWeight:FontWeight.w900)),Text('${user['city']}',style:const TextStyle(color:Colors.white70)),const SizedBox(height:12),const Text('İşletme bilgileri bulut hesabındaki başvurundan yüklenir.',style:TextStyle(color:Colors.white70)),
  ])),
  Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
  const Text('NFC tag sipariş özeti',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:forest)),
