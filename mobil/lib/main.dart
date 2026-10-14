@@ -4,15 +4,27 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() => runApp(const CafeDunyamApp());
 
-const forest = Color(0xFF174C3C);
-const cream = Color(0xFFF7F1E5);
-const brown = Color(0xFF795548);
+const forest = Color(0xFF211711);
+const cream = Color(0xFFF7F0E5);
+const brown = Color(0xFFB76532);
+const gold = Color(0xFFE4B56B);
 const usersKey = 'cd_local_users_v1';
 const sessionKey = 'cd_local_session_v1';
 const cafesKey = 'cd_local_cafes_v1';
 const dealsKey = 'cd_local_deals_v1';
 const stampsKey = 'cd_local_stamps_v1';
 const businessOrdersKey = 'cd_local_business_orders_v1';
+
+class CafeLogo extends StatelessWidget {
+  final double size;
+  final bool light;
+  const CafeLogo({super.key, this.size = 42, this.light = false});
+  @override Widget build(BuildContext context) => Container(
+    width: size, height: size,
+    decoration: BoxDecoration(color: light ? const Color(0xFF352116) : forest, borderRadius: BorderRadius.circular(size * .28), border: Border.all(color: gold.withValues(alpha: .75), width: 1.2)),
+    child: Icon(Icons.coffee_rounded, size: size * .62, color: gold),
+  );
+}
 
 class CafeDunyamApp extends StatelessWidget {
   const CafeDunyamApp({super.key});
@@ -22,11 +34,11 @@ class CafeDunyamApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: forest, surface: cream),
+      colorScheme: ColorScheme.fromSeed(seedColor: brown, surface: cream),
       scaffoldBackgroundColor: cream,
-      appBarTheme: const AppBarTheme(backgroundColor: cream, foregroundColor: forest),
+      appBarTheme: const AppBarTheme(backgroundColor: cream, foregroundColor: forest, centerTitle: false),
       cardTheme: CardThemeData(color: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
-      inputDecorationTheme: InputDecorationTheme(border: OutlineInputBorder(borderRadius: BorderRadius.circular(14))),
+      inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE8DCCB))), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: brown, width: 1.5))),
     ),
     home: const GatePage(),
   );
@@ -108,9 +120,12 @@ class WelcomePage extends StatelessWidget {
   const WelcomePage({required this.onDone, super.key});
   @override Widget build(BuildContext context) => Scaffold(body: SafeArea(child: ListView(padding: const EdgeInsets.all(24), children: [
     const SizedBox(height: 28),
-    Container(padding: const EdgeInsets.all(26), decoration: BoxDecoration(color: forest, borderRadius: BorderRadius.circular(28)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Icon(Icons.coffee, color: Color(0xFFE7D4B2), size: 48), SizedBox(height: 18),
-      Text('Kahve molan, avantajın olsun.', style: TextStyle(color: Colors.white, fontSize: 30, fontWeight: FontWeight.w900)),
+    Container(padding: const EdgeInsets.all(26), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF211711), Color(0xFF4A2A1A)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(28), boxShadow: const [BoxShadow(color: Color(0x223B2417), blurRadius: 18, offset: Offset(0, 8))]), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      CafeLogo(size: 76, light: true), SizedBox(height: 18),
+      Text('Cafe Dünyam', style: TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w900)),
+      Text('Kafeler, sen ve daha fazlası…', style: TextStyle(color: gold, fontSize: 14, fontStyle: FontStyle.italic)),
+      SizedBox(height: 18),
+      Text('Kahve molan, avantajın olsun.', style: TextStyle(color: Colors.white, fontSize: 25, fontWeight: FontWeight.w900)),
       SizedBox(height: 10), Text('Kafeleri keşfet, fırsatları yakala ve sadakat kartlarını tek yerde takip et.', style: TextStyle(color: Colors.white70, fontSize: 16)),
     ])),
     const SizedBox(height: 28), const Text('Cafe Dünyam’a hoş geldin', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, color: forest)),
@@ -637,14 +652,112 @@ class AdminShell extends StatefulWidget {
 }
 class _AdminShellState extends State<AdminShell> {
   int tab = 0;
+  Future<void> _logout() async {
+    final p = await SharedPreferences.getInstance(); await p.remove(sessionKey);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const GatePage()), (r) => false);
+  }
   @override Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Cafe Dünyam • Yönetici')),
-    body: IndexedStack(index: tab, children: const [AdminApplications(), AdminCampaigns()]),
+    appBar: AppBar(leading: const Padding(padding: EdgeInsets.all(8), child: CafeLogo(size: 38)), title: const Text('Yönetim Merkezi', style: TextStyle(fontWeight: FontWeight.w900)), actions: [IconButton(tooltip: 'Çıkış yap', onPressed: _logout, icon: const Icon(Icons.logout))]),
+    body: IndexedStack(index: tab, children: const [AdminDashboard(), AdminApplications(), AdminCampaigns(), AdminUsers(), AdminOrders(), AdminSettings()]),
     bottomNavigationBar: NavigationBar(selectedIndex: tab, onDestinationSelected: (i) => setState(() => tab = i), destinations: const [
+      NavigationDestination(icon: Icon(Icons.space_dashboard_rounded), label: 'Özet'),
       NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: 'Başvurular'),
       NavigationDestination(icon: Icon(Icons.campaign_outlined), label: 'Kampanyalar'),
+      NavigationDestination(icon: Icon(Icons.people_alt_outlined), label: 'Kullanıcılar'),
+      NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'Siparişler'),
+      NavigationDestination(icon: Icon(Icons.tune_rounded), label: 'Ayarlar'),
     ]),
   );
+}
+
+class AdminDashboard extends StatelessWidget {
+  const AdminDashboard({super.key});
+  @override Widget build(BuildContext context) => FutureBuilder<List<dynamic>>(
+    future: Future.wait([LocalData.list(usersKey, []), LocalData.list(dealsKey, starterDeals), LocalData.list(businessOrdersKey, [])]),
+    builder: (context, s) {
+      if (!s.hasData) return const Center(child: CircularProgressIndicator());
+      final users = s.data![0] as List<Map<String,dynamic>>;
+      final deals = s.data![1] as List<Map<String,dynamic>>;
+      final orders = s.data![2] as List<Map<String,dynamic>>;
+      final pending = users.where((u) => u['role'] == 'business' && u['approvalStatus'] != 'approved' && u['approvalStatus'] != 'rejected').length;
+      final approved = users.where((u) => u['role'] == 'business' && u['approvalStatus'] == 'approved').length;
+      final active = deals.where((d) => d['active'] == true).length;
+      Widget metric(String label, int value, IconData icon, Color color) => Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, color: color, size: 26), const SizedBox(height: 12), Text('$value', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)), Text(label, style: const TextStyle(fontSize: 12))]))));
+      return ListView(padding: const EdgeInsets.all(18), children: [
+        Container(padding: const EdgeInsets.all(22), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF211711), Color(0xFF684025)]), borderRadius: BorderRadius.circular(24)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          CafeLogo(size: 54, light: true), SizedBox(height: 16),
+          Text('Kontrol sende.', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900)),
+          SizedBox(height: 6), Text('Cafe Dünyam işletmelerini, kampanyalarını ve sipariş taleplerini tek merkezden yönet.', style: TextStyle(color: Colors.white70)),
+        ])),
+        const SizedBox(height: 12),
+        Row(children: [metric('Bekleyen başvuru', pending, Icons.pending_actions, brown), const SizedBox(width: 8), metric('Onaylı işletme', approved, Icons.storefront, forest)]),
+        Row(children: [metric('Aktif kampanya', active, Icons.campaign, brown), const SizedBox(width: 8), metric('Sipariş talebi', orders.length, Icons.receipt_long, forest)]),
+        const SizedBox(height: 12),
+        const Heading('Yönetim kısayolları', 'Sık kullanılan işlemlere hızlı erişim.'),
+        Card(child: ListTile(leading: const Icon(Icons.fact_check, color: brown), title: const Text('Başvuruları incele'), subtitle: Text('$pending başvuru inceleme bekliyor'), trailing: const Icon(Icons.chevron_right), onTap: () {})),
+        Card(child: ListTile(leading: const Icon(Icons.campaign, color: brown), title: const Text('Kampanya denetimi'), subtitle: Text('$active aktif kampanya'), trailing: const Icon(Icons.chevron_right))),
+        const LocalModeNote(),
+      ]);
+    },
+  );
+}
+
+class AdminUsers extends StatefulWidget { const AdminUsers({super.key}); @override State<AdminUsers> createState()=>_AdminUsersState(); }
+class _AdminUsersState extends State<AdminUsers> {
+  Future<void> _remove(Map<String,dynamic> u) async {
+    final ok = await showDialog<bool>(context: context, builder: (c)=>AlertDialog(title: const Text('Kullanıcıyı sil?'), content: Text('${u['email']} hesabı bu cihazdan kaldırılacak.'), actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Vazgeç')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('Sil'))]));
+    if (ok != true || u['role'] == 'admin') return;
+    final users = await LocalData.list(usersKey, []); users.removeWhere((x)=>x['email']==u['email']); await LocalData.saveList(usersKey, users);
+    if (mounted) setState((){});
+  }
+  @override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(usersKey, []),builder:(context,s){
+    if(!s.hasData)return const Center(child:CircularProgressIndicator());
+    final users=s.data!;
+    return ListView(padding:const EdgeInsets.all(18),children:[
+      Heading('Kullanıcı yönetimi','Yerel cihazda kayıtlı müşteri ve işletme hesapları.'),
+      Card(child:ListTile(leading:const Icon(Icons.people,color:brown),title:Text('${users.length} hesap'),subtitle:const Text('Yönetici hesabı silinemez.'))),
+      ...users.map((u)=>Card(child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFF0E1CF),child:Icon(u['role']=='business'?Icons.storefront:u['role']=='admin'?Icons.admin_panel_settings:Icons.person,color:forest)),title:Text('${u['cafeName'] ?? u['name'] ?? 'Kullanıcı'}'),subtitle:Text('${u['email']}\nRol: ${u['role']} • Durum: ${u['approvalStatus'] ?? 'Aktif'}'),isThreeLine:true,trailing:u['role']=='admin'?null:IconButton(tooltip:'Hesabı sil',onPressed:()=>_remove(u),icon:const Icon(Icons.delete_outline,color:Colors.red))))),
+      const LocalModeNote(),
+    ]);
+  });
+}
+
+class AdminOrders extends StatefulWidget { const AdminOrders({super.key}); @override State<AdminOrders> createState()=>_AdminOrdersState(); }
+class _AdminOrdersState extends State<AdminOrders> {
+  Future<void> _setStatus(Map<String,dynamic> order,String status) async {
+    final orders=await LocalData.list(businessOrdersKey,[]); final i=orders.indexWhere((o)=>o['id']==order['id']); if(i<0)return;
+    orders[i]['orderStatus']=status; await LocalData.saveList(businessOrdersKey,orders); if(mounted)setState((){});
+  }
+  @override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(businessOrdersKey,[]),builder:(context,s){
+    if(!s.hasData)return const Center(child:CircularProgressIndicator());
+    final orders=s.data!;
+    return ListView(padding:const EdgeInsets.all(18),children:[
+      Heading('Sipariş ve NFC talepleri','Örnek fiyatlı sipariş kayıtları; ödeme alınmaz.'),
+      if(orders.isEmpty) const Card(child:Padding(padding:EdgeInsets.all(18),child:Text('Henüz sipariş talebi yok.'))),
+      ...orders.map((o)=>Card(child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text('${o['businessName'] ?? 'İşletme'}',style:const TextStyle(fontSize:18,fontWeight:FontWeight.w900)),
+        Text('${o['businessEmail'] ?? ''} • ${o['tagCount'] ?? 0} NFC tag'),
+        Text('Toplam: ${o['totalTry'] ?? 0} TL (örnek)'),
+        Text('Teslimat: ${o['recipientName'] ?? ''} • ${o['province'] ?? ''} / ${o['district'] ?? ''}'),
+        Text('Adres: ${o['address'] ?? ''}'),
+        Text('Durum: ${o['orderStatus'] ?? 'İncelemede'}'),
+        DropdownButtonFormField<String>(value:['İncelemede','Onaylandı — ödeme bekliyor','Hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].contains(o['orderStatus'])?o['orderStatus']:'İncelemede',decoration:const InputDecoration(labelText:'Sipariş durumu'),items:const ['İncelemede','Onaylandı — ödeme bekliyor','Hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v){if(v!=null)_setStatus(o,v);}),
+      ])))),
+      const LocalModeNote(),
+    ]);
+  });
+}
+
+class AdminSettings extends StatelessWidget {
+  const AdminSettings({super.key});
+  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(18),children:[
+    const Heading('Yönetim ayarları','Demo sürümünün çalışma sınırları ve yönetim bilgileri.'),
+    const Card(child:ListTile(leading:Icon(Icons.shield_outlined,color:forest),title:Text('Yönetici erişimi'),subtitle:Text('Demo: admin@cafedunyam.local • CafeAdmin123!'))),
+    const Card(child:ListTile(leading:Icon(Icons.payments_outlined,color:brown),title:Text('IBAN / ödeme'),subtitle:Text('Gerçek IBAN henüz tanımlanmadı. Demo IBAN ile ödeme yapmayın.'))),
+    const Card(child:ListTile(leading:Icon(Icons.storage_outlined,color:forest),title:Text('Veri saklama'),subtitle:Text('Hesaplar, başvurular ve kampanyalar yalnızca bu cihazda saklanır.'))),
+    const LocalModeNote(),
+  ]);
 }
 class AdminApplications extends StatefulWidget {
   const AdminApplications({super.key});
