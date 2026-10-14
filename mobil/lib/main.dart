@@ -348,7 +348,7 @@ class _AuthPageState extends State<AuthPage> {
           sectionTitle('Müşteri bilgileri'),
         ],
       ] else ...[
-        TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-posta', prefixIcon: Icon(Icons.email_outlined)), validator: (v) => v == null || !v.contains('@') ? 'Geçerli e-posta yaz.' : null),
+        TextFormField(controller: email, keyboardType: TextInputType.text, decoration: const InputDecoration(labelText: 'Kullanıcı adı veya e-posta', prefixIcon: Icon(Icons.person_outline)), validator: (v) => v == null || v.trim().isEmpty ? 'Kullanıcı adını veya e-postanı yaz.' : null),
         const SizedBox(height: 12),
         TextFormField(controller: password, obscureText: hide, decoration: InputDecoration(labelText: 'Parola', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => hide = !hide), icon: Icon(hide ? Icons.visibility : Icons.visibility_off))), validator: (v) => v == null || v.length < 6 ? 'En az 6 karakter kullan.' : null),
       ],
