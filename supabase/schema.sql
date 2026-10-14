@@ -46,6 +46,13 @@ create table if not exists public.cafe_memberships (
   primary key (customer_id, cafe_id)
 );
 
+create table if not exists public.saved_campaigns (
+  customer_id uuid not null references public.profiles(id) on delete cascade,
+  campaign_id uuid not null references public.campaigns(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (customer_id, campaign_id)
+);
+
 create table if not exists public.stamp_events (
   id uuid primary key default gen_random_uuid(),
   customer_id uuid not null references public.profiles(id) on delete restrict,
@@ -90,6 +97,7 @@ alter table public.profiles enable row level security;
 alter table public.cafes enable row level security;
 alter table public.campaigns enable row level security;
 alter table public.cafe_memberships enable row level security;
+alter table public.saved_campaigns enable row level security;
 alter table public.stamp_events enable row level security;
 alter table public.business_orders enable row level security;
 alter table public.business_applications enable row level security;
@@ -118,6 +126,9 @@ drop policy if exists "campaigns_admin_update" on public.campaigns;
 drop policy if exists "campaigns_admin_delete" on public.campaigns;
 drop policy if exists "campaigns_owner_delete" on public.campaigns;
 drop policy if exists "memberships_read_self" on public.cafe_memberships;
+drop policy if exists "saved_campaigns_read_self" on public.saved_campaigns;
+drop policy if exists "saved_campaigns_insert_self" on public.saved_campaigns;
+drop policy if exists "saved_campaigns_delete_self" on public.saved_campaigns;
 drop policy if exists "stamp_events_read_participant" on public.stamp_events;
 drop policy if exists "orders_read_owner" on public.business_orders;
 drop policy if exists "orders_read_admin" on public.business_orders;
@@ -164,6 +175,9 @@ create policy "campaigns_owner_delete" on public.campaigns for delete to authent
 
 -- Customers can read their own balances and event history. Clients cannot directly write stamps.
 create policy "memberships_read_self" on public.cafe_memberships for select to authenticated using (customer_id = auth.uid());
+create policy "saved_campaigns_read_self" on public.saved_campaigns for select to authenticated using (customer_id = auth.uid());
+create policy "saved_campaigns_insert_self" on public.saved_campaigns for insert to authenticated with check (customer_id = auth.uid());
+create policy "saved_campaigns_delete_self" on public.saved_campaigns for delete to authenticated using (customer_id = auth.uid());
 create policy "stamp_events_read_participant" on public.stamp_events for select to authenticated using (
   customer_id = auth.uid() or issued_by = auth.uid()
 );
@@ -255,6 +269,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
+create index if not exists saved_campaigns_customer_idx on public.saved_campaigns(customer_id, created_at desc);
 create index if not exists applications_status_idx on public.business_applications(application_status);
 create index if not exists cafes_city_active_idx on public.cafes(city, is_active);
 create index if not exists campaigns_cafe_active_idx on public.campaigns(cafe_id, is_active);
