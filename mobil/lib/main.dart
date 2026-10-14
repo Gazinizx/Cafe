@@ -12,6 +12,7 @@ const sessionKey = 'cd_local_session_v1';
 const cafesKey = 'cd_local_cafes_v1';
 const dealsKey = 'cd_local_deals_v1';
 const stampsKey = 'cd_local_stamps_v1';
+const businessOrdersKey = 'cd_local_business_orders_v1';
 
 class CafeDunyamApp extends StatelessWidget {
   const CafeDunyamApp({super.key});
@@ -104,63 +105,174 @@ class WelcomePage extends StatelessWidget {
       SizedBox(height: 10), Text('Kafeleri keşfet, fırsatları yakala ve sadakat kartlarını tek yerde takip et.', style: TextStyle(color: Colors.white70, fontSize: 16)),
     ])),
     const SizedBox(height: 28), const Text('Cafe Dünyam’a hoş geldin', style: TextStyle(fontSize: 25, fontWeight: FontWeight.w800, color: forest)),
-    const SizedBox(height: 8), const Text('Devam etmek için giriş yap veya yeni bir yerel test hesabı oluştur.'),
-    const SizedBox(height: 18),
-    FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: false, onDone: onDone))), icon: const Icon(Icons.login), label: const Text('Giriş yap')),
-    OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: true, onDone: onDone))), icon: const Icon(Icons.person_add_alt_1), label: const Text('Hesap oluştur')),
+    const SizedBox(height: 8), const Text('Nasıl devam etmek istersin?'), const SizedBox(height: 18),
+    FilledButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: true, initialRole: 'customer', onDone: onDone))), icon: const Icon(Icons.person_outline), label: const Text('Müşteriyim')),
+    const SizedBox(height: 8),
+    OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: true, initialRole: 'business', onDone: onDone))), icon: const Icon(Icons.storefront_outlined), label: const Text('İşletmeyim')),
+    const SizedBox(height: 8),
+    TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: false, onDone: onDone))), icon: const Icon(Icons.login), label: const Text('Hesabım var — giriş yap')),
     const SizedBox(height: 20), const LocalModeNote(),
   ])));
 }
 
 class AuthPage extends StatefulWidget {
   final bool register;
+  final String initialRole;
   final ValueChanged<Map<String,dynamic>> onDone;
-  const AuthPage({required this.register, required this.onDone, super.key});
+  const AuthPage({required this.register, this.initialRole = 'customer', required this.onDone, super.key});
   @override State<AuthPage> createState() => _AuthPageState();
 }
 class _AuthPageState extends State<AuthPage> {
   final form = GlobalKey<FormState>();
-  final name = TextEditingController(), email = TextEditingController(), password = TextEditingController(), cafeName = TextEditingController(), city = TextEditingController();
-  String role = 'customer'; bool busy = false, hide = true;
-  @override void dispose() { name.dispose(); email.dispose(); password.dispose(); cafeName.dispose(); city.dispose(); super.dispose(); }
+  final name = TextEditingController(), email = TextEditingController(), password = TextEditingController();
+  final cafeName = TextEditingController(), phone = TextEditingController(), businessType = TextEditingController();
+  final taxOffice = TextEditingController(), taxNumber = TextEditingController();
+  final province = TextEditingController(), district = TextEditingController(), address = TextEditingController();
+  final deliveryName = TextEditingController(), deliveryPhone = TextEditingController();
+  String role = 'customer';
+  int tagCount = 10;
+  bool busy = false, hide = true;
+  static const Map<int,int> packagePrices = {10: 499, 25: 999, 50: 1799, 100: 2999};
+  static const int shippingPrice = 99;
+  int get orderTotal => (packagePrices[tagCount] ?? 499) + shippingPrice;
+
+  @override void initState() { super.initState(); role = widget.initialRole; }
+  @override void dispose() {
+    name.dispose(); email.dispose(); password.dispose(); cafeName.dispose(); phone.dispose();
+    businessType.dispose(); taxOffice.dispose(); taxNumber.dispose(); province.dispose();
+    district.dispose(); address.dispose(); deliveryName.dispose(); deliveryPhone.dispose();
+    super.dispose();
+  }
+  String? requiredText(String? value, String label) => value == null || value.trim().isEmpty ? '$label alanını doldur.' : null;
+  Widget sectionTitle(String text) => Padding(padding: const EdgeInsets.only(top: 18, bottom: 8), child: Text(text, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: forest)));
+
   Future<void> submit() async {
     if (!(form.currentState?.validate() ?? false)) return;
     setState(() => busy = true);
     final users = await LocalData.list(usersKey, []);
     final mail = email.text.trim().toLowerCase();
     if (widget.register) {
-      if (users.any((u) => u['email'] == mail)) { setState(() => busy = false); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bu e-posta ile yerel hesap zaten var.'))); return; }
-      final user = <String,dynamic>{'name':name.text.trim(),'email':mail,'password':password.text,'role':role,'cafeName':cafeName.text.trim(),'city':city.text.trim()};
-      users.add(user); await LocalData.saveList(usersKey, users);
-      final p = await SharedPreferences.getInstance(); await p.setString(sessionKey, mail);
+      if (users.any((u) => u['email'] == mail)) {
+        setState(() => busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bu e-posta ile yerel hesap zaten var.')));
+        return;
+      }
+      final order = role == 'business' ? <String,dynamic>{
+        'id': 'order-' + DateTime.now().microsecondsSinceEpoch.toString(),
+        'businessEmail': mail, 'businessName': cafeName.text.trim(), 'tagCount': tagCount,
+        'packagePriceTry': packagePrices[tagCount], 'shippingTry': shippingPrice, 'totalTry': orderTotal,
+        'paymentMethod': 'IBAN havale/EFT', 'paymentStatus': 'Ödeme bekleniyor',
+        'orderStatus': 'Yerel taslak — gönderim yapılmadı',
+        'recipientName': deliveryName.text.trim(), 'recipientPhone': deliveryPhone.text.trim(),
+        'province': province.text.trim(), 'district': district.text.trim(), 'address': address.text.trim(),
+        'createdAt': DateTime.now().toIso8601String(),
+      } : null;
+      final user = <String,dynamic>{
+        'name': name.text.trim(), 'email': mail, 'password': password.text,
+        'role': role, 'cafeName': cafeName.text.trim(), 'city': province.text.trim(),
+        if (role == 'business') ...{
+          'phone': phone.text.trim(), 'businessType': businessType.text.trim(),
+          'taxOffice': taxOffice.text.trim(), 'taxNumber': taxNumber.text.trim(),
+          'province': province.text.trim(), 'district': district.text.trim(),
+          'businessAddress': address.text.trim(), 'deliveryName': deliveryName.text.trim(),
+          'deliveryPhone': deliveryPhone.text.trim(), 'tagCount': tagCount, 'nfcOrder': order,
+        },
+      };
+      users.add(user);
+      await LocalData.saveList(usersKey, users);
+      if (order != null) {
+        final orders = await LocalData.list(businessOrdersKey, []);
+        orders.insert(0, order);
+        await LocalData.saveList(businessOrdersKey, orders);
+      }
+      final p = await SharedPreferences.getInstance();
+      await p.setString(sessionKey, mail);
       if (mounted) widget.onDone(user);
     } else {
       final matches = users.where((u) => u['email'] == mail && u['password'] == password.text).toList();
-      if (matches.isEmpty) { setState(() => busy = false); ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('E-posta veya parola eşleşmedi. Bu cihazda hesap oluşturduğundan emin ol.'))); return; }
-      final p = await SharedPreferences.getInstance(); await p.setString(sessionKey, mail);
+      if (matches.isEmpty) {
+        setState(() => busy = false);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('E-posta veya parola eşleşmedi. Bu cihazda hesap oluşturduğundan emin ol.')));
+        return;
+      }
+      final p = await SharedPreferences.getInstance();
+      await p.setString(sessionKey, mail);
       if (mounted) widget.onDone(matches.first);
     }
     if (mounted) setState(() => busy = false);
   }
-  @override Widget build(BuildContext context) => Scaffold(appBar: AppBar(title: Text(widget.register ? 'Hesap oluştur' : 'Giriş yap')), body: Form(key: form, child: ListView(padding: const EdgeInsets.all(22), children: [
-    Text(widget.register ? 'Sana uygun hesabı oluştur' : 'Tekrar hoş geldin', style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900, color: forest)),
-    const SizedBox(height: 8), const LocalModeNote(), const SizedBox(height: 18),
-    if (widget.register) ...[
-      TextFormField(controller:name, decoration:const InputDecoration(labelText:'Ad soyad'), validator:(v)=>v==null||v.trim().isEmpty?'Adını yaz.':null),
-      const SizedBox(height:12),
-      const Text('Hesap türü', style: TextStyle(fontWeight:FontWeight.bold)),
-      RadioListTile<String>(value:'customer', groupValue:role, onChanged:(v)=>setState(()=>role=v!), title:const Text('Müşteri'), subtitle:const Text('Kafeleri keşfet, fırsatları kaydet ve kartlarını takip et.'), contentPadding:EdgeInsets.zero),
-      RadioListTile<String>(value:'business', groupValue:role, onChanged:(v)=>setState(()=>role=v!), title:const Text('İşletme'), subtitle:const Text('İşletme panelini ve kampanya taslaklarını yönet.'), contentPadding:EdgeInsets.zero),
-      if(role=='business') ...[
-        TextFormField(controller:cafeName, decoration:const InputDecoration(labelText:'İşletme / kafe adı'), validator:(v)=>role=='business'&&(v==null||v.trim().isEmpty)?'İşletme adını yaz.':null),
-        const SizedBox(height:12), TextFormField(controller:city, decoration:const InputDecoration(labelText:'Şehir'), validator:(v)=>role=='business'&&(v==null||v.trim().isEmpty)?'Şehir yaz.':null),
+
+  @override Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: Text(widget.register ? (role == 'business' ? 'İşletme kaydı' : 'Müşteri kaydı') : 'Giriş yap')),
+    body: Form(key: form, child: ListView(padding: const EdgeInsets.all(22), children: [
+      Text(widget.register ? (role == 'business' ? 'İşletmeni Cafe Dünyam’a kaydet' : 'Müşteri hesabını oluştur') : 'Tekrar hoş geldin', style: const TextStyle(fontSize: 25, fontWeight: FontWeight.w900, color: forest)),
+      const SizedBox(height: 8), const LocalModeNote(),
+      if (widget.register) ...[
+        sectionTitle('Hesap bilgileri'),
+        TextFormField(controller: name, decoration: const InputDecoration(labelText: 'Yetkili kişinin adı soyadı'), validator: (v) => requiredText(v, 'Ad soyad')),
+        const SizedBox(height: 12),
+        TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-posta', prefixIcon: Icon(Icons.email_outlined)), validator: (v) => v == null || !v.contains('@') ? 'Geçerli e-posta yaz.' : null),
+        const SizedBox(height: 12),
+        TextFormField(controller: password, obscureText: hide, decoration: InputDecoration(labelText: 'Parola', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => hide = !hide), icon: Icon(hide ? Icons.visibility : Icons.visibility_off))), validator: (v) => v == null || v.length < 6 ? 'En az 6 karakter kullan.' : null),
+        if (role == 'business') ...[
+          sectionTitle('İşletme bilgileri'),
+          TextFormField(controller: cafeName, decoration: const InputDecoration(labelText: 'İşletme / kafe adı'), validator: (v) => requiredText(v, 'İşletme adı')),
+          const SizedBox(height: 12),
+          TextFormField(controller: businessType, decoration: const InputDecoration(labelText: 'İşletme türü (kafe, pastane vb.)'), validator: (v) => requiredText(v, 'İşletme türü')),
+          const SizedBox(height: 12),
+          TextFormField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'İşletme telefonu'), validator: (v) => requiredText(v, 'İşletme telefonu')),
+          const SizedBox(height: 12),
+          TextFormField(controller: taxOffice, decoration: const InputDecoration(labelText: 'Vergi dairesi (örnek kayıt alanı)')),
+          const SizedBox(height: 12),
+          TextFormField(controller: taxNumber, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Vergi no (örnek kayıt alanı)')),
+          sectionTitle('İşletme adresi'),
+          TextFormField(controller: province, decoration: const InputDecoration(labelText: 'İl'), validator: (v) => requiredText(v, 'İl')),
+          const SizedBox(height: 12),
+          TextFormField(controller: district, decoration: const InputDecoration(labelText: 'İlçe'), validator: (v) => requiredText(v, 'İlçe')),
+          const SizedBox(height: 12),
+          TextFormField(controller: address, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'İşletme / teslimat açık adresi'), validator: (v) => requiredText(v, 'Açık adres')),
+          sectionTitle('NFC tag siparişi'),
+          const Text('Bunlar test fiyatlarıdır, gerçek satış fiyatı değildir. Kargo bedeli de örnektir.'),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<int>(
+            value: tagCount, decoration: const InputDecoration(labelText: 'Kaç adet NFC tag istiyorsun?'),
+            items: const [
+              DropdownMenuItem(value: 10, child: Text('10 adet — 499 TL')),
+              DropdownMenuItem(value: 25, child: Text('25 adet — 999 TL')),
+              DropdownMenuItem(value: 50, child: Text('50 adet — 1.799 TL')),
+              DropdownMenuItem(value: 100, child: Text('100 adet — 2.999 TL')),
+            ],
+            onChanged: (v) => setState(() => tagCount = v ?? 10),
+          ),
+          const SizedBox(height: 8),
+          Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Paket: ' + packagePrices[tagCount].toString() + ' TL'),
+            Text('Örnek kargo: ' + shippingPrice.toString() + ' TL'),
+            const Divider(),
+            Text('Örnek toplam: ' + orderTotal.toString() + ' TL', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: forest)),
+          ]))),
+          sectionTitle('Teslimat bilgileri'),
+          TextFormField(controller: deliveryName, decoration: const InputDecoration(labelText: 'Teslim alacak kişinin adı soyadı'), validator: (v) => requiredText(v, 'Teslim alacak kişi')),
+          const SizedBox(height: 12),
+          TextFormField(controller: deliveryPhone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Teslimat telefonu'), validator: (v) => requiredText(v, 'Teslimat telefonu')),
+          sectionTitle('IBAN ile ödeme — demo'),
+          Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFFFFE8C2), borderRadius: BorderRadius.circular(14)), child: const Text('ÖRNEK BİLGİLER — GERÇEK ÖDEME YAPMA. IBAN ve hesap sahibi temsili yer tutuculardır; gerçek hesap bilgisi henüz girilmedi. Havale/EFT ve ödeme onayı otomatik çalışmaz.')),
+          const SizedBox(height: 10),
+          const SelectableText('Hesap sahibi: CAFE DÜNYAM (ÖRNEK)\nIBAN: TR00 0000 0000 0000 0000 0000 00\nAçıklama: İşletme adı + e-posta'),
+          const SizedBox(height: 10),
+          const Text('Kayıt ve sipariş bu cihazda yerel taslak olarak saklanır; bize otomatik gönderilmez.'),
+        ] else ...[
+          sectionTitle('Müşteri bilgileri'),
+        ],
+      ] else ...[
+        TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-posta', prefixIcon: Icon(Icons.email_outlined)), validator: (v) => v == null || !v.contains('@') ? 'Geçerli e-posta yaz.' : null),
+        const SizedBox(height: 12),
+        TextFormField(controller: password, obscureText: hide, decoration: InputDecoration(labelText: 'Parola', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => hide = !hide), icon: Icon(hide ? Icons.visibility : Icons.visibility_off))), validator: (v) => v == null || v.length < 6 ? 'En az 6 karakter kullan.' : null),
       ],
-    ],
-    TextFormField(controller:email, keyboardType:TextInputType.emailAddress, decoration:const InputDecoration(labelText:'E-posta', prefixIcon:Icon(Icons.email_outlined)), validator:(v)=>v==null||!v.contains('@')?'Geçerli e-posta yaz.':null),
-    const SizedBox(height:12),
-    TextFormField(controller:password, obscureText:hide, decoration:InputDecoration(labelText:'Parola', prefixIcon:const Icon(Icons.lock_outline), suffixIcon:IconButton(onPressed:()=>setState(()=>hide=!hide), icon:Icon(hide?Icons.visibility:Icons.visibility_off))), validator:(v)=>v==null||v.length<6?'En az 6 karakter kullan.':null),
-    const SizedBox(height:22), FilledButton(onPressed:busy?null:submit, child:Text(busy?'İşleniyor…':widget.register?'Hesabı oluştur':'Giriş yap')),
-  ])));
+      const SizedBox(height: 22),
+      FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'İşleniyor…' : widget.register ? (role == 'business' ? 'İşletme kaydını ve sipariş taslağını oluştur' : 'Müşteri hesabını oluştur') : 'Giriş yap')),
+    ])),
+  );
 }
 
 class LocalModeNote extends StatelessWidget {
