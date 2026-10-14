@@ -3,10 +3,9 @@
 Flutter uygulamasında Supabase Auth ve bulut veri erişimi eklendi. Kafeler, kampanyalar, işletme başvuruları, NFC siparişleri ve müşteri sadakat bakiyeleri için aşağıdaki SQL şemasının projeye uygulanmış olması gerekir. Şema uygulanmadan bulut özellikleri çalışmaz.
 
 ## 1. Supabase projesi
-1. Supabase üzerinde yeni bir proje oluştur.
+1. Daha önce oluşturduğun `phsmojbrbszobpyeeipc` projesini aç; yeni proje oluşturma.
 2. SQL Editor'de `supabase/schema.sql` dosyasının tamamını çalıştır.
-3. Project Settings → API bölümünden Project URL ve publishable/anon client key değerlerini al.
-4. Bu değerleri istemci yapılandırması olarak kullan. **service_role key'i mobil uygulamaya veya depoya koyma.**
+3. Project Settings → API bölümündeki Project URL ve publishable key'in uygulamadaki değerlerle eşleştiğini kontrol et. **service_role key'i mobil uygulamaya veya depoya koyma.**
 
 ## 2. Yönetici hesabını hazırlama
 1. Uygulamada yönetici olarak kullanacağın e-posta ile normal bir hesap oluştur.
@@ -42,7 +41,7 @@ Bu depo Supabase CLI yapısına hazırlandı: `supabase/config.toml` ve `supabas
 
 GitHub yetkilendirmesi, Supabase projesi oluşturma ve hesap onayı kullanıcı hesabında yapılmalıdır; bunları senin adına dışarıdan tamamlayamam. Bu işlem için GitHub şifreni veya Supabase gizli anahtarlarını bana gönderme. Mobil uygulamaya yalnızca Project URL ve publishable/anon anahtarı girilir; `service_role` anahtarı kesinlikle paylaşılmaz.
 
-## 4. Yayına çıkmadan önce
+## 5. Yayına çıkmadan önce
 - SQL şemasının gerçekten uygulandığını ve yeni bir müşteri/işletme hesabıyla tabloların oluştuğunu doğrula.
 - Gerçek satın alma doğrulaması olmadan sadakat damgası üretme; doğrudan istemci yazma izni verme.
 - Admin işlemlerini yalnızca güvenilir sunucu tarafı yönetim aracıyla yap.
