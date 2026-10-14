@@ -52,11 +52,12 @@ class _AppShellState extends State<AppShell> {
   int tab = 0;
   final Map<String, int> stamps = {for (final cafe in cafes) cafe.name: 0};
   final Set<String> savedDeals = {};
-  String status = 'Damga kartları bu telefonda saklanır.';
+  String status = 'Yerel test modu: veriler yalnızca bu telefonda saklanır.';
   @override
   void initState() {
     super.initState();
     _loadStamps();
+    _loadSavedDeals();
   }
   Future<void> _loadStamps() async {
     final prefs = await SharedPreferences.getInstance();
@@ -74,6 +75,19 @@ class _AppShellState extends State<AppShell> {
   Future<void> _saveStamps() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(storageKey, jsonEncode(stamps));
+  }
+  Future<void> _loadSavedDeals() async {
+    final prefs = await SharedPreferences.getInstance();
+    final items = prefs.getStringList('cafe_dunyam_saved_deals_v1') ?? <String>[];
+    if (!mounted) return;
+    setState(() => savedDeals.addAll(items));
+  }
+  Future<void> _toggleSavedDeal(String title) async {
+    setState(() {
+      if (!savedDeals.add(title)) savedDeals.remove(title);
+    });
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('cafe_dunyam_saved_deals_v1', savedDeals.toList()..sort());
   }
   Future<void> _handleNfcCode(String code) async {
     final normalized = code.trim().toUpperCase();
@@ -100,7 +114,7 @@ class _AppShellState extends State<AppShell> {
       HomePage(openCafe: _openCafe, goTab: (v) => setState(() => tab = v)),
       CafeListPage(openCafe: _openCafe),
       CardsPage(stamps: stamps, status: status, scan: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NfcReader(onCode: _handleNfcCode)))),
-      DealsPage(saved: savedDeals, toggle: (v) => setState(() => savedDeals.contains(v) ? savedDeals.remove(v) : savedDeals.add(v))),
+      DealsPage(saved: savedDeals, toggle: _toggleSavedDeal),
       const ProfilePage(),
     ])),
     bottomNavigationBar: NavigationBar(
@@ -331,18 +345,34 @@ class DealsPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
     const PageHeading('Fırsatlar', 'Kampanyaları keşfet ve kaydet.'),
-    DealTile('Öğrenci indirimi', 'Seçili içeceklerde %15 indirim', Icons.school),
-    DealTile('Tatlı molası', 'Kahve yanında tatlı fırsatı', Icons.cake),
-    Card(child: ListTile(title: const Text('Kaydedilen fırsatlar'), subtitle: Text(saved.isEmpty ? 'Henüz fırsat kaydetmedin.' : saved.join(', ')))),
+    DealTile('Öğrenci indirimi', 'Seçili içeceklerde %15 indirim', Icons.school, saved: saved.contains('Öğrenci indirimi'), onToggle: () => toggle('Öğrenci indirimi')),
+    DealTile('Tatlı molası', 'Kahve yanında tatlı fırsatı', Icons.cake, saved: saved.contains('Tatlı molası'), onToggle: () => toggle('Tatlı molası')),
+    const SectionTitle('Kaydedilen fırsatlar'),
+    if (saved.isEmpty)
+      const Card(child: ListTile(leading: Icon(Icons.bookmark_border), title: Text('Henüz fırsat kaydetmedin.'), subtitle: Text('Bir fırsatın yanındaki yer imi simgesine dokun.')))
+    else
+      ...([...saved]..sort()).map((title) => Card(child: ListTile(leading: const Icon(Icons.bookmark, color: green), title: Text(title)))),
+    const Padding(padding: EdgeInsets.only(top: 10), child: Text('Fırsatlar örnek veridir. Gerçek işletme kampanyaları henüz bağlı değildir.', style: TextStyle(color: Colors.black54))),
   ]);
 }
 
 class DealTile extends StatelessWidget {
   final String title, subtitle;
   final IconData icon;
-  const DealTile(this.title, this.subtitle, this.icon, {super.key});
+  final bool saved;
+  final VoidCallback? onToggle;
+  const DealTile(this.title, this.subtitle, this.icon, {this.saved = false, this.onToggle, super.key});
   @override
-  Widget build(BuildContext context) => Card(child: ListTile(leading: CircleAvatar(backgroundColor: cream, child: Icon(icon, color: green)), title: Text(title), subtitle: Text(subtitle)));
+  Widget build(BuildContext context) => Card(child: ListTile(
+    leading: CircleAvatar(backgroundColor: cream, child: Icon(icon, color: green)),
+    title: Text(title),
+    subtitle: Text(subtitle),
+    trailing: onToggle == null ? null : IconButton(
+      tooltip: saved ? 'Fırsatı kaydedilenlerden çıkar' : 'Fırsatı kaydet',
+      onPressed: onToggle,
+      icon: Icon(saved ? Icons.bookmark : Icons.bookmark_border, color: green),
+    ),
+  ));
 }
 
 class ProfilePage extends StatelessWidget {
