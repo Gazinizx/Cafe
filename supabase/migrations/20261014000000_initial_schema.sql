@@ -73,8 +73,8 @@ alter table public.business_orders enable row level security;
 
 -- Profiles: users can read/update their own profile; admin operations belong in trusted server tooling.
 create policy "profiles_read_self" on public.profiles for select to authenticated using (id = auth.uid());
-create policy "profiles_insert_self" on public.profiles for insert to authenticated with check (id = auth.uid() and role <> 'admin');
-create policy "profiles_update_self_limited" on public.profiles for update to authenticated using (id = auth.uid()) with check (id = auth.uid() and role <> 'admin');
+-- Profile creation is handled by the trusted auth.users trigger. Clients cannot change roles or approval status.
+-- Keep profile writes unavailable to client sessions to prevent self-approval or privilege escalation.
 
 -- Public users may see active cafes and campaigns. Only an approved owner may manage their cafe.
 create policy "cafes_read_active" on public.cafes for select to anon, authenticated using (is_active = true or owner_id = auth.uid());
