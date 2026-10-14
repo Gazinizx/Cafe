@@ -1,8 +1,37 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-void main() => runApp(const CafeDunyamApp());
+const supabaseUrl = String.fromEnvironment(
+  'SUPABASE_URL',
+  defaultValue: 'https://phsmojbrbszobpyeeipc.supabase.co',
+);
+const supabasePublishableKey = String.fromEnvironment(
+  'SUPABASE_ANON_KEY',
+  defaultValue: 'sb_publishable_qOXjE2ZLsFcD3Eg0_XnfVA_Q106MWe_',
+);
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Supabase.initialize(url: supabaseUrl, anonKey: supabasePublishableKey);
+  runApp(const CafeDunyamApp());
+}
+
+SupabaseClient get cloud => Supabase.instance.client;
+
+Future<Map<String, dynamic>> cloudProfile(User authUser) async {
+  final row = await cloud.from('profiles').select().eq('id', authUser.id).maybeSingle();
+  final meta = authUser.userMetadata ?? <String, dynamic>{};
+  return <String, dynamic>{
+    'id': authUser.id,
+    'name': (row?['full_name'] ?? meta['full_name'] ?? authUser.email ?? 'Kullanıcı').toString(),
+    'email': authUser.email ?? '',
+    'role': (row?['role'] ?? meta['role'] ?? 'customer').toString(),
+    'approvalStatus': (row?['approval_status'] ?? (meta['role'] == 'business' ? 'pending' : 'approved')).toString(),
+    'cloudAccount': true,
+  };
+}
 
 const forest = Color(0xFF211711);
 const cream = Color(0xFFF7F0E5);
@@ -127,6 +156,15 @@ class _GatePageState extends State<GatePage> {
     }
     if (!mounted) return;
     setState(() => loading = false);
+    final authUser = cloud.auth.currentUser;
+    if (authUser != null && mounted) {
+      try {
+        _open(await cloudProfile(authUser));
+        return;
+      } catch (_) {
+        // Fall back to the local demo session if cloud profile lookup fails.
+      }
+    }
     final email = p.getString(sessionKey);
     if (email != null && mounted) {
       final found = users.where((u) => u['email'] == email).toList();
@@ -212,73 +250,91 @@ class _AuthPageState extends State<AuthPage> {
   Future<void> submit() async {
     if (!(form.currentState?.validate() ?? false)) return;
     setState(() => busy = true);
-    final users = await LocalData.list(usersKey, []);
     final mail = email.text.trim().toLowerCase();
-    if (widget.register) {
-      if (users.any((u) => u['email'] == mail)) {
-        setState(() => busy = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Bu e-posta ile yerel hesap zaten var.')));
-        return;
-      }
-      final order = role == 'business' ? <String,dynamic>{
-        'id': 'order-' + DateTime.now().microsecondsSinceEpoch.toString(),
-        'businessEmail': mail, 'businessName': cafeName.text.trim(), 'tagCount': tagCount,
-        'packagePriceTry': packagePrices[tagCount], 'shippingTry': shippingPrice, 'totalTry': orderTotal,
-        'paymentMethod': 'IBAN havale/EFT', 'paymentStatus': 'Ödeme bekleniyor',
-        'orderStatus': 'Yerel taslak — gönderim yapılmadı',
-        'recipientName': deliveryName.text.trim(), 'recipientPhone': deliveryPhone.text.trim(),
-        'province': deliveryProvince.text.trim(), 'district': deliveryDistrict.text.trim(), 'address': deliveryAddress.text.trim(),
-        'createdAt': DateTime.now().toIso8601String(),
-      } : null;
-      final user = <String,dynamic>{
-        'name': name.text.trim(), 'email': mail, 'password': password.text,
-        'role': role, 'cafeName': cafeName.text.trim(), 'city': province.text.trim(),
-        if (role == 'business') ...{
-          'approvalStatus': 'pending',
-          'applicationStatus': 'Başvurunuz inceleniyor',
-          'applicationSubmittedAt': DateTime.now().toIso8601String(),
-          'phone': phone.text.trim(), 'businessType': businessType.text.trim(),
-          'taxOffice': taxOffice.text.trim(), 'taxNumber': taxNumber.text.trim(),
-          'province': province.text.trim(), 'district': district.text.trim(),
-          'businessAddress': address.text.trim(), 'deliveryName': deliveryName.text.trim(),
-          'deliveryPhone': deliveryPhone.text.trim(), 'deliveryProvince': deliveryProvince.text.trim(),
-          'deliveryDistrict': deliveryDistrict.text.trim(), 'deliveryAddress': deliveryAddress.text.trim(),
-          'tagCount': tagCount, 'nfcOrder': order,
-        },
-      };
-      users.add(user);
-      await LocalData.saveList(usersKey, users);
-      if (order != null) {
-        final orders = await LocalData.list(businessOrdersKey, []);
-        orders.insert(0, order);
-        await LocalData.saveList(businessOrdersKey, orders);
-      }
-      final p = await SharedPreferences.getInstance();
-      await p.setString(sessionKey, mail);
-      if (mounted) widget.onDone(user);
-    } else {
-      if (mail == 'admin@cafedunyam.local' && password.text == 'CafeAdmin123!') {
-        final admin = <String,dynamic>{'name':'Cafe Dünyam Yönetici','email':mail,'password':password.text,'role':'admin','approvalStatus':'approved'};
+    try {
+      // Admin demo remains local-only; customer/business accounts use Supabase Auth.
+      if (!widget.register && mail == 'admin@cafedunyam.local' && password.text == 'CafeAdmin123!') {
+        final admin = <String,dynamic>{'name':'Cafe Dünyam Yönetici','email':mail,'role':'admin','approvalStatus':'approved'};
+        final users = await LocalData.list(usersKey, []);
         final existing = users.indexWhere((u) => u['email'] == mail);
         if (existing >= 0) { users[existing] = admin; } else { users.add(admin); }
         await LocalData.saveList(usersKey, users);
         final p = await SharedPreferences.getInstance();
         await p.setString(sessionKey, mail);
         if (mounted) widget.onDone(admin);
-        if (mounted) setState(() => busy = false);
         return;
       }
-      final matches = users.where((u) => u['email'] == mail && u['password'] == password.text).toList();
-      if (matches.isEmpty) {
-        setState(() => busy = false);
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('E-posta veya parola eşleşmedi. Bu cihazda hesap oluşturduğundan emin ol.')));
-        return;
+
+      if (widget.register) {
+        final response = await cloud.auth.signUp(
+          email: mail,
+          password: password.text,
+          data: {'full_name': name.text.trim(), 'role': role},
+        );
+        final authUser = response.user;
+        if (authUser == null) throw const AuthException('Hesap oluşturulamadı. Lütfen tekrar dene.');
+        final user = <String,dynamic>{
+          'id': authUser.id, 'name': name.text.trim(), 'email': mail, 'role': role,
+          'approvalStatus': role == 'business' ? 'pending' : 'approved',
+          'cloudAccount': true, 'cafeName': cafeName.text.trim(), 'city': province.text.trim(),
+          if (role == 'business') ...{
+            'applicationStatus': 'Başvurunuz inceleniyor',
+            'applicationSubmittedAt': DateTime.now().toIso8601String(),
+            'phone': phone.text.trim(), 'businessType': businessType.text.trim(),
+            'taxOffice': taxOffice.text.trim(), 'taxNumber': taxNumber.text.trim(),
+            'province': province.text.trim(), 'district': district.text.trim(),
+            'businessAddress': address.text.trim(), 'deliveryName': deliveryName.text.trim(),
+            'deliveryPhone': deliveryPhone.text.trim(), 'deliveryProvince': deliveryProvince.text.trim(),
+            'deliveryDistrict': deliveryDistrict.text.trim(), 'deliveryAddress': deliveryAddress.text.trim(),
+            'tagCount': tagCount,
+          },
+        };
+        if (cloud.auth.currentSession == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Hesap oluşturuldu. Devam etmek için e-posta doğrulama bağlantısını aç.')),
+            );
+            Navigator.of(context).pop();
+          }
+          return;
+        }
+        if (role == 'business') {
+          final order = <String,dynamic>{
+            'businessName': cafeName.text.trim(), 'tagCount': tagCount,
+            'packagePriceTry': packagePrices[tagCount], 'shippingTry': shippingPrice,
+            'totalTry': orderTotal, 'paymentMethod': 'IBAN havale/EFT',
+            'paymentStatus': 'Ödeme bekleniyor', 'orderStatus': 'Başvuru inceleniyor',
+            'recipientName': deliveryName.text.trim(), 'recipientPhone': deliveryPhone.text.trim(),
+            'province': deliveryProvince.text.trim(), 'district': deliveryDistrict.text.trim(),
+            'address': deliveryAddress.text.trim(), 'createdAt': DateTime.now().toIso8601String(),
+          };
+          await cloud.from('business_orders').insert({
+            'business_id': authUser.id, 'order_data': order,
+            'order_status': 'pending', 'payment_status': 'pending',
+          });
+          user['nfcOrder'] = order;
+        }
+        final p = await SharedPreferences.getInstance();
+        await p.remove(sessionKey);
+        if (mounted) widget.onDone(user);
+      } else {
+        final response = await cloud.auth.signInWithPassword(email: mail, password: password.text);
+        final authUser = response.user;
+        if (authUser == null) throw const AuthException('Giriş başarısız. Bilgilerini kontrol et.');
+        final user = await cloudProfile(authUser);
+        if (mounted) widget.onDone(user);
       }
-      final p = await SharedPreferences.getInstance();
-      await p.setString(sessionKey, mail);
-      if (mounted) widget.onDone(matches.first);
+    } on AuthException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } on PostgrestException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Bulut veritabanı hatası: ${e.message}. Supabase şema kurulumunu kontrol et.')),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('İşlem tamamlanamadı: $e')));
+    } finally {
+      if (mounted) setState(() => busy = false);
     }
-    if (mounted) setState(() => busy = false);
   }
 
   @override Widget build(BuildContext context) => Scaffold(
@@ -360,7 +416,7 @@ class _AuthPageState extends State<AuthPage> {
 
 class LocalModeNote extends StatelessWidget {
   const LocalModeNote({super.key});
-  @override Widget build(BuildContext context) => Container(padding:const EdgeInsets.all(13), decoration:BoxDecoration(color:const Color(0xFFE8DCC7), borderRadius:BorderRadius.circular(13)), child:const Text('Yerel test sürümü: hesaplar ve içerikler yalnızca bu cihazda saklanır. Başka cihazlarla senkronizasyon ve güvenli sunucu doğrulaması yoktur.', style:TextStyle(fontSize:13)));
+  @override Widget build(BuildContext context) => Container(padding:const EdgeInsets.all(13), decoration:BoxDecoration(color:const Color(0xFFE8DCC7), borderRadius:BorderRadius.circular(13)), child:const Text('Giriş ve kayıt Supabase bulut kimlik doğrulamasını kullanır. Kafe, kampanya ve yönetim ekranlarının bazı verileri henüz yerel test verisidir.', style:TextStyle(fontSize:13)));
 }
 
 class CustomerShell extends StatefulWidget {
