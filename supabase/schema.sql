@@ -55,6 +55,26 @@ create table if not exists public.stamp_events (
   unique (cafe_id, receipt_reference)
 );
 
+create table if not exists public.business_applications (
+  business_id uuid primary key references public.profiles(id) on delete cascade,
+  cafe_name text not null,
+  phone text,
+  business_type text,
+  tax_office text,
+  tax_number text,
+  province text,
+  district text,
+  business_address text,
+  delivery_name text,
+  delivery_phone text,
+  delivery_province text,
+  delivery_district text,
+  delivery_address text,
+  tag_count integer not null default 0,
+  application_status text not null default 'pending' check (application_status in ('pending','approved','rejected')),
+  updated_at timestamptz not null default now()
+);
+
 create table if not exists public.business_orders (
   id uuid primary key default gen_random_uuid(),
   business_id uuid not null references public.profiles(id) on delete cascade,
@@ -70,20 +90,34 @@ alter table public.campaigns enable row level security;
 alter table public.cafe_memberships enable row level security;
 alter table public.stamp_events enable row level security;
 alter table public.business_orders enable row level security;
+alter table public.business_applications enable row level security;
 
 -- Profiles: users can read/update their own profile; admin operations belong in trusted server tooling.
+create or replace function public.is_cafe_admin()
+returns boolean language sql stable security definer set search_path = ''
+as $
+  select exists (select 1 from public.profiles where id = auth.uid() and role = 'admin' and approval_status = 'approved');
+$;
+
 create policy "profiles_read_self" on public.profiles for select to authenticated using (id = auth.uid());
--- Profile creation is handled by the trusted auth.users trigger. Clients cannot change roles or approval status.
--- Keep profile writes unavailable to client sessions to prevent self-approval or privilege escalation.
+create policy "profiles_read_admin" on public.profiles for select to authenticated using (public.is_cafe_admin());
+create policy "profiles_admin_update" on public.profiles for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
+-- Profile creation is handled by the trusted auth.users trigger. Customers cannot set their own role or approval status.
 
 -- Public users may see active cafes and campaigns. Only an approved owner may manage their cafe.
 create policy "cafes_read_active" on public.cafes for select to anon, authenticated using (is_active = true or owner_id = auth.uid());
 create policy "cafes_owner_insert" on public.cafes for insert to authenticated with check (
-  owner_id = auth.uid() and exists (
-    select 1 from public.profiles p where p.id = auth.uid() and p.role = 'business' and p.approval_status = 'approved'
+  owner_id = auth.uid() and is_active = false and exists (
+    select 1 from public.profiles p where p.id = auth.uid() and p.role = 'business'
   )
 );
-create policy "cafes_owner_update" on public.cafes for update to authenticated using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+create policy "cafes_owner_update" on public.cafes for update to authenticated using (
+  owner_id = auth.uid() and exists (select 1 from public.profiles p where p.id = auth.uid() and p.approval_status = 'approved')
+) with check (
+  owner_id = auth.uid() and exists (select 1 from public.profiles p where p.id = auth.uid() and p.approval_status = 'approved')
+);
+create policy "cafes_admin_update" on public.cafes for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
+create policy "cafes_admin_read" on public.cafes for select to authenticated using (public.is_cafe_admin());
 create policy "campaigns_read_active" on public.campaigns for select to anon, authenticated using (
   is_active = true or exists (select 1 from public.cafes c where c.id = cafe_id and c.owner_id = auth.uid())
 );
@@ -96,6 +130,8 @@ create policy "campaigns_owner_update" on public.campaigns for update to authent
 ) with check (
   exists (select 1 from public.cafes c where c.id = cafe_id and c.owner_id = auth.uid())
 );
+create policy "campaigns_admin_update" on public.campaigns for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
+create policy "campaigns_admin_delete" on public.campaigns for delete to authenticated using (public.is_cafe_admin());
 
 -- Customers can read their own balances and event history. Clients cannot directly write stamps.
 create policy "memberships_read_self" on public.cafe_memberships for select to authenticated using (customer_id = auth.uid());
@@ -103,7 +139,16 @@ create policy "stamp_events_read_participant" on public.stamp_events for select 
   customer_id = auth.uid() or issued_by = auth.uid()
 );
 create policy "orders_read_owner" on public.business_orders for select to authenticated using (business_id = auth.uid());
+create policy "orders_read_admin" on public.business_orders for select to authenticated using (public.is_cafe_admin());
 create policy "orders_insert_owner" on public.business_orders for insert to authenticated with check (business_id = auth.uid());
+create policy "orders_admin_update" on public.business_orders for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
+
+create policy "applications_read_owner" on public.business_applications for select to authenticated using (business_id = auth.uid() or public.is_cafe_admin());
+create policy "applications_insert_owner" on public.business_applications for insert to authenticated with check (
+  business_id = auth.uid() and exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'business')
+);
+create policy "applications_owner_update" on public.business_applications for update to authenticated using (business_id = auth.uid()) with check (business_id = auth.uid());
+create policy "applications_admin_update" on public.business_applications for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
 
 -- Create a profile after signup. Role comes from user metadata but admin is never allowed from client metadata.
 create or replace function public.handle_new_user()
@@ -124,6 +169,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
+create index if not exists applications_status_idx on public.business_applications(application_status);
 create index if not exists cafes_city_active_idx on public.cafes(city, is_active);
 create index if not exists campaigns_cafe_active_idx on public.campaigns(cafe_id, is_active);
 create index if not exists stamp_events_customer_created_idx on public.stamp_events(customer_id, created_at desc);
