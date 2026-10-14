@@ -746,8 +746,31 @@ class CustomerDeals extends StatefulWidget{const CustomerDeals({super.key});@ove
 class _CustomerDealsState extends State<CustomerDeals>{
  Set<String> saved={};
  @override void initState(){super.initState();_load();}
- Future<void> _load()async{final p=await SharedPreferences.getInstance();if(mounted)setState(()=>saved=(p.getStringList('cd_saved_deals')??[]).toSet());}
- Future<void> _toggle(String id)async{setState(()=>saved.contains(id)?saved.remove(id):saved.add(id));final p=await SharedPreferences.getInstance();await p.setStringList('cd_saved_deals',saved.toList());}
+ Future<void> _load() async {
+    if (cloud.auth.currentSession != null) {
+      final rows = await cloud.from('saved_campaigns').select('campaign_id').eq('customer_id', cloud.auth.currentUser!.id);
+      if (mounted) setState(() => saved = (rows as List).map((r) => r['campaign_id'].toString()).toSet());
+      return;
+    }
+    final p = await SharedPreferences.getInstance();
+    if (mounted) setState(() => saved = (p.getStringList('cd_saved_deals') ?? []).toSet());
+  }
+  Future<void> _toggle(String id) async {
+    if (cloud.auth.currentSession != null) {
+      final customerId = cloud.auth.currentUser!.id;
+      if (saved.contains(id)) {
+        await cloud.from('saved_campaigns').delete().eq('customer_id', customerId).eq('campaign_id', id);
+        setState(() => saved.remove(id));
+      } else {
+        await cloud.from('saved_campaigns').insert({'customer_id': customerId, 'campaign_id': id});
+        setState(() => saved.add(id));
+      }
+      return;
+    }
+    setState(() => saved.contains(id) ? saved.remove(id) : saved.add(id));
+    final p = await SharedPreferences.getInstance();
+    await p.setStringList('cd_saved_deals', saved.toList());
+  }
  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
  const Heading('Fırsatlar','Kampanyaları keşfet ve kaydet.'),
  FutureBuilder<List<Object>>(future:Future.wait([LocalData.list(dealsKey,starterDeals),LocalData.list(cafesKey,starterCafes)]),builder:(context,s){
