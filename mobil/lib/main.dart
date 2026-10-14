@@ -198,12 +198,15 @@ class LocalData {
       if (key == businessOrdersKey) {
         final query = cloud.from('business_orders').select();
         final rows = isAdmin
-          ? await query.order('created_at', ascending: false)
+          ? await cloud.from('business_orders').select('*, profiles(email, full_name)').order('created_at', ascending: false)
           : await cloud.from('business_orders').select().eq('business_id', auth.id).order('created_at', ascending: false);
         return (rows as List).map((raw) {
           final r = Map<String,dynamic>.from(raw as Map);
           final data = r['order_data'] is Map ? Map<String,dynamic>.from(r['order_data'] as Map) : <String,dynamic>{};
           data['id'] = r['id']; data['businessId'] = r['business_id'];
+          final owner = r['profiles'] is Map ? Map<String,dynamic>.from(r['profiles'] as Map) : <String,dynamic>{};
+          data['businessEmail'] = owner['email'] ?? '';
+          data['businessName'] ??= owner['full_name'] ?? 'İşletme';
           data['orderStatus'] = r['order_status']; data['paymentStatus'] = r['payment_status'];
           return data;
         }).toList();
@@ -222,6 +225,23 @@ class LocalData {
       final auth = cloud.auth.currentUser!;
       final profile = await cloud.from('profiles').select('role').eq('id', auth.id).maybeSingle();
       final isAdmin = profile?['role'] == 'admin';
+      if (key == dealsKey && isAdmin) {
+        final rows = await cloud.from('campaigns').select('id');
+        final ids = value.map((d) => d['id']?.toString()).whereType<String>().where(_uuid).toSet();
+        for (final row in (rows as List)) {
+          final id = row['id'].toString();
+          if (!ids.contains(id)) await cloud.from('campaigns').delete().eq('id', id);
+        }
+        for (final d in value) {
+          final id = d['id']?.toString();
+          if (!_uuid(id)) continue;
+          await cloud.from('campaigns').update({
+            'title': d['title'] ?? '', 'benefit': d['benefit'] ?? '',
+            'audience': d['audience'] ?? 'Herkes', 'is_active': d['active'] == true,
+          }).eq('id', id!);
+        }
+        return;
+      }
       if (key == dealsKey) {
         final cafe = await cloud.from('cafes').select('id').eq('owner_id', auth.id).maybeSingle();
         final ownedCafeId = cafe?['id']?.toString();
