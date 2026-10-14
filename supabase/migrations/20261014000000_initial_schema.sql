@@ -5,6 +5,7 @@ create extension if not exists pgcrypto;
 create table if not exists public.profiles (
   id uuid primary key references auth.users(id) on delete cascade,
   full_name text not null default '',
+  email text,
   role text not null check (role in ('customer','business','admin')),
   approval_status text not null default 'pending'
     check (approval_status in ('pending','approved','rejected')),
@@ -84,6 +85,7 @@ create table if not exists public.business_orders (
   created_at timestamptz not null default now()
 );
 
+alter table public.profiles add column if not exists email text;
 alter table public.profiles enable row level security;
 alter table public.cafes enable row level security;
 alter table public.campaigns enable row level security;
@@ -132,6 +134,7 @@ create policy "campaigns_owner_update" on public.campaigns for update to authent
 );
 create policy "campaigns_admin_update" on public.campaigns for update to authenticated using (public.is_cafe_admin()) with check (public.is_cafe_admin());
 create policy "campaigns_admin_delete" on public.campaigns for delete to authenticated using (public.is_cafe_admin());
+create policy "campaigns_owner_delete" on public.campaigns for delete to authenticated using (exists (select 1 from public.cafes c where c.id = cafe_id and c.owner_id = auth.uid()));
 
 -- Customers can read their own balances and event history. Clients cannot directly write stamps.
 create policy "memberships_read_self" on public.cafe_memberships for select to authenticated using (customer_id = auth.uid());
@@ -158,8 +161,8 @@ declare requested_role text;
 begin
   requested_role := coalesce(new.raw_user_meta_data ->> 'role', 'customer');
   if requested_role not in ('customer','business') then requested_role := 'customer'; end if;
-  insert into public.profiles (id, full_name, role, approval_status)
-  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name',''), requested_role,
+  insert into public.profiles (id, full_name, email, role, approval_status)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name',''), new.email, requested_role,
           case when requested_role = 'business' then 'pending' else 'approved' end);
 
   if requested_role = 'business' then
