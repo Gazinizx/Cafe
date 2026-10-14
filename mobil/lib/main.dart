@@ -88,11 +88,16 @@ class _GatePageState extends State<GatePage> {
     final p = await SharedPreferences.getInstance();
     await LocalData.list(cafesKey, starterCafes);
     await LocalData.list(dealsKey, starterDeals);
+    final users = await LocalData.list(usersKey, []);
+    // Demo müşteri hesabını her kurulumda hazır tut; yalnızca yerel test içindir.
+    if (!users.any((u) => u['email'] == 'deneme')) {
+      users.add({'name': 'Deneme Müşteri', 'email': 'deneme', 'password': 'deneme', 'role': 'customer'});
+      await LocalData.saveList(usersKey, users);
+    }
     if (!mounted) return;
     setState(() => loading = false);
     final email = p.getString(sessionKey);
     if (email != null && mounted) {
-      final users = await LocalData.list(usersKey, []);
       final found = users.where((u) => u['email'] == email).toList();
       if (found.isNotEmpty && mounted) _open(found.first);
     }
@@ -254,7 +259,7 @@ class _AuthPageState extends State<AuthPage> {
         sectionTitle('Hesap bilgileri'),
         TextFormField(controller: name, decoration: const InputDecoration(labelText: 'Yetkili kişinin adı soyadı'), validator: (v) => requiredText(v, 'Ad soyad')),
         const SizedBox(height: 12),
-        TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-posta', prefixIcon: Icon(Icons.email_outlined)), validator: (v) => v == null || !v.contains('@') ? 'Geçerli e-posta yaz.' : null),
+        TextFormField(controller: email, keyboardType: widget.register ? TextInputType.emailAddress : TextInputType.text, decoration: InputDecoration(labelText: widget.register ? 'E-posta' : 'Kullanıcı adı veya e-posta', prefixIcon: const Icon(Icons.email_outlined)), validator: (v) => widget.register ? (v == null || !v.contains('@') ? 'Geçerli e-posta yaz.' : null) : (v == null || v.trim().isEmpty ? 'Kullanıcı adı veya e-posta yaz.' : null)),
         const SizedBox(height: 12),
         TextFormField(controller: password, obscureText: hide, decoration: InputDecoration(labelText: 'Parola', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => hide = !hide), icon: Icon(hide ? Icons.visibility : Icons.visibility_off))), validator: (v) => v == null || v.length < 6 ? 'En az 6 karakter kullan.' : null),
         if (role == 'business') ...[
