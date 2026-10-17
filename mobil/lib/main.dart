@@ -329,7 +329,6 @@ class _GatePageState extends State<GatePage> {
   bool loading = true;
   @override void initState() { super.initState(); _check(); }
   Future<void> _check() async {
-    final p = await SharedPreferences.getInstance();
     try {
       await LocalData.list(cafesKey, starterCafes);
       await LocalData.list(dealsKey, starterDeals);
@@ -344,13 +343,8 @@ class _GatePageState extends State<GatePage> {
         _open(await cloudProfile(authUser));
         return;
       } catch (_) {
-        // Fall back to the local demo session if cloud profile lookup fails.
+        // If the cloud profile cannot be loaded, keep the entry screen available.
       }
-    }
-    final email = p.getString(sessionKey);
-    if (email != null && mounted) {
-      final found = users.where((u) => u['email'] == email).toList();
-      if (found.isNotEmpty && mounted) _open(found.first);
     }
   }
   void _open(Map<String,dynamic> user) {
