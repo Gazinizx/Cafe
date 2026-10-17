@@ -4,8 +4,8 @@ Flutter tabanlı Android ve iOS uygulaması.
 
 - `mobil/`: müşteri ve işletme akışları olan Flutter uygulaması.
 - `yonetim/index.html`: tarayıcı içinde çalışan yerel örnek yönetim paneli.
-- `.github/workflows/android-apk.yml`: Android APK derlemesi.
-- `.github/workflows/cross-platform.yml`: Android analiz/test/APK ve iOS simülatör derlemesi.
+- `.github/workflows/android-apk.yml`: Android release APK derlemesi ve artifact çıktısı.
+- `.github/workflows/cross-platform.yml`: Android analiz/testleri ve iOS simülatör analiz/test/derlemesi; APK paketlemesi yalnızca ayrı Android iş akışında yapılır.
 - `supabase/schema.sql`: Supabase veritabanı tabloları ve başlangıç RLS politikaları.
 - `SUPABASE_SETUP.md`: bulut kurulumu ve güvenlik notları.
 
