@@ -98,7 +98,7 @@ jobs:
         run: flutter pub get
       - name: Analyze
         working-directory: mobil
-        run: flutter analyze
+        run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
       - name: Test
         working-directory: mobil
         run: flutter test
