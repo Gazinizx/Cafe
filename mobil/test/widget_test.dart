@@ -22,5 +22,17 @@ void main() {
     expect(find.text('Cafe Dünyam'), findsOneWidget);
     expect(find.text('Müşteriyim'), findsOneWidget);
     expect(find.text('İşletmeyim'), findsOneWidget);
+    expect(find.text('Yönetici demo girişi'), findsNothing);
+  });
+
+  testWidgets('login screen exposes email-based sign-in and password recovery', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AuthPage(register: false, onDone: (_) {}),
+    ));
+    await tester.pump();
+
+    expect(find.text('E-posta'), findsOneWidget);
+    expect(find.text('Parolamı unuttum'), findsOneWidget);
+    expect(find.text('Giriş yap'), findsWidgets);
   });
 }
