@@ -12,13 +12,26 @@ const supabasePublishableKey = String.fromEnvironment(
   defaultValue: 'sb_publishable_qOXjE2ZLsFcD3Eg0_XnfVA_Q106MWe_',
 );
 
+late final SupabaseClient _fallbackCloud;
+bool _supabaseInitialized = false;
+
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
+  // A cloud configuration/initialization problem must never prevent the app
+  // from showing its local-first screens.
+  try {
+    await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
+    _supabaseInitialized = true;
+  } catch (error, stackTrace) {
+    debugPrint('Supabase initialization failed; starting in local mode: $error');
+    debugPrintStack(stackTrace: stackTrace);
+    _fallbackCloud = SupabaseClient(supabaseUrl, supabasePublishableKey);
+  }
   runApp(const CafeDunyamApp());
 }
 
-SupabaseClient get cloud => Supabase.instance.client;
+SupabaseClient get cloud =>
+    _supabaseInitialized ? Supabase.instance.client : _fallbackCloud;
 
 Future<Map<String, dynamic>> cloudProfile(User authUser) async {
   final row = await cloud.from('profiles').select().eq('id', authUser.id).maybeSingle();
