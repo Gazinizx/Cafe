@@ -336,12 +336,6 @@ class _GatePageState extends State<GatePage> {
     } catch (_) {
       // Keep the entry screen usable if the cloud schema has not been applied yet.
     }
-    final users = await LocalData.list(usersKey, []);
-    // Demo müşteri hesabını her kurulumda hazır tut; yalnızca yerel test içindir.
-    if (!users.any((u) => u['email'] == 'deneme')) {
-      users.add({'name': 'Deneme Müşteri', 'email': 'deneme', 'password': 'deneme', 'role': 'customer'});
-      await LocalData.saveList(usersKey, users);
-    }
     if (!mounted) return;
     setState(() => loading = false);
     final authUser = cloud.auth.currentUser;
@@ -397,7 +391,6 @@ class WelcomePage extends StatelessWidget {
     OutlinedButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: true, initialRole: 'business', onDone: onDone))), icon: const Icon(Icons.storefront_outlined), label: const Text('İşletmeyim')),
     const SizedBox(height: 8),
     TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: false, onDone: onDone))), icon: const Icon(Icons.login), label: const Text('Hesabım var — giriş yap')),
-    TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => AuthPage(register: false, onDone: onDone))), child: const Text('Yönetici demo girişi')),
     const SizedBox(height: 20), const LocalModeNote(),
   ])));
 }
@@ -435,24 +428,30 @@ class _AuthPageState extends State<AuthPage> {
   String? requiredText(String? value, String label) => value == null || value.trim().isEmpty ? '$label alanını doldur.' : null;
   Widget sectionTitle(String text) => Padding(padding: const EdgeInsets.only(top: 18, bottom: 8), child: Text(text, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: forest)));
 
+  Future<void> _resetPassword() async {
+    final mail = email.text.trim().toLowerCase();
+    if (!RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$').hasMatch(mail)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Parola sıfırlama bağlantısı için geçerli e-posta adresini yaz.')));
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      await cloud.auth.resetPasswordForEmail(mail);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('E-posta adresin kayıtlıysa parola sıfırlama bağlantısı gönderildi. Gelen kutunu ve spam klasörünü kontrol et.')));
+    } on AuthException catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Parola sıfırlama başlatılamadı: $e')));
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
   Future<void> submit() async {
     if (!(form.currentState?.validate() ?? false)) return;
     setState(() => busy = true);
     final mail = email.text.trim().toLowerCase();
     try {
-      // Admin demo remains local-only; customer/business accounts use Supabase Auth.
-      if (!widget.register && mail == 'admin@cafedunyam.local' && password.text == 'CafeAdmin123!') {
-        final admin = <String,dynamic>{'name':'Cafe Dünyam Yönetici','email':mail,'role':'admin','approvalStatus':'approved'};
-        final users = await LocalData.list(usersKey, []);
-        final existing = users.indexWhere((u) => u['email'] == mail);
-        if (existing >= 0) { users[existing] = admin; } else { users.add(admin); }
-        await LocalData.saveList(usersKey, users);
-        final p = await SharedPreferences.getInstance();
-        await p.setString(sessionKey, mail);
-        if (mounted) widget.onDone(admin);
-        return;
-      }
-
       if (widget.register) {
         final response = await cloud.auth.signUp(
           email: mail,
@@ -524,13 +523,6 @@ class _AuthPageState extends State<AuthPage> {
         await p.remove(sessionKey);
         if (mounted) widget.onDone(user);
       } else {
-        if (mail == 'deneme' && password.text == 'deneme') {
-          final demo = <String,dynamic>{'name':'Deneme Müşteri','email':'deneme','role':'customer','approvalStatus':'approved'};
-          final p = await SharedPreferences.getInstance();
-          await p.setString(sessionKey, mail);
-          if (mounted) widget.onDone(demo);
-          return;
-        }
         final response = await cloud.auth.signInWithPassword(email: mail, password: password.text);
         final authUser = response.user;
         if (authUser == null) throw const AuthException('Giriş başarısız. Bilgilerini kontrol et.');
@@ -612,14 +604,15 @@ class _AuthPageState extends State<AuthPage> {
           sectionTitle('Ödeme bilgileri'),
           Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: const Color(0xFFE8DCC7), borderRadius: BorderRadius.circular(14)), child: const Text('IBAN ve ödeme talimatları işletme başvurusu onaylandıktan sonra gösterilecektir. Şimdilik sipariş talebin incelemeye alınır.')),
           const SizedBox(height: 10),
-          const Text('Başvuru ve sipariş bu cihazda yerel taslak olarak saklanır; yöneticiye otomatik gönderilmez.'),
+          const Text('Başvuru ve sipariş bilgilerin kayıt sırasında hesabına bağlı bulut sistemine gönderilir. Onaylanana kadar işletme özellikleri kısıtlıdır.'),
         ] else ...[
           sectionTitle('Müşteri bilgileri'),
         ],
       ] else ...[
-        TextFormField(controller: email, keyboardType: TextInputType.text, decoration: const InputDecoration(labelText: 'Kullanıcı adı veya e-posta', prefixIcon: Icon(Icons.person_outline)), validator: (v) => v == null || v.trim().isEmpty ? 'Kullanıcı adını veya e-postanı yaz.' : null),
+        TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-posta', prefixIcon: Icon(Icons.email_outlined)), validator: (v) => v == null || !RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$').hasMatch(v.trim()) ? 'Geçerli e-posta adresini yaz.' : null),
         const SizedBox(height: 12),
-        TextFormField(controller: password, obscureText: hide, decoration: InputDecoration(labelText: 'Parola', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => hide = !hide), icon: Icon(hide ? Icons.visibility : Icons.visibility_off))), validator: (v) => v == null || v.length < 6 ? 'En az 6 karakter kullan.' : null),
+        TextFormField(controller: password, obscureText: hide, decoration: InputDecoration(labelText: 'Parola', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => hide = !hide), icon: Icon(hide ? Icons.visibility : Icons.visibility_off))), validator: (v) => v == null || v.isEmpty ? 'Parolanı yaz.' : null),
+        Align(alignment: Alignment.centerRight, child: TextButton(onPressed: busy ? null : _resetPassword, child: const Text('Parolamı unuttum'))),
       ],
       const SizedBox(height: 22),
       FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'İşleniyor…' : widget.register ? (role == 'business' ? 'İşletme kaydını ve sipariş taslağını oluştur' : 'Müşteri hesabını oluştur') : 'Giriş yap')),
@@ -629,7 +622,7 @@ class _AuthPageState extends State<AuthPage> {
 
 class LocalModeNote extends StatelessWidget {
   const LocalModeNote({super.key});
-  @override Widget build(BuildContext context) => Container(padding:const EdgeInsets.all(13), decoration:BoxDecoration(color:const Color(0xFFE8DCC7), borderRadius:BorderRadius.circular(13)), child:const Text('Giriş ve kayıt Supabase bulut kimlik doğrulamasını kullanır. Kafe, kampanya ve yönetim ekranlarının bazı verileri henüz yerel test verisidir.', style:TextStyle(fontSize:13)));
+  @override Widget build(BuildContext context) => Container(padding:const EdgeInsets.all(13), decoration:BoxDecoration(color:const Color(0xFFE8DCC7), borderRadius:BorderRadius.circular(13)), child:const Text('Hesap işlemleri bulut kimlik doğrulamasını kullanır. İşletme başvuruları yönetici onayına tabidir. Ödeme bilgileri yalnızca doğrulanmış resmî kanallardan paylaşılmalıdır.', style:TextStyle(fontSize:13)));
 }
 
 class CustomerShell extends StatefulWidget {
@@ -1093,10 +1086,10 @@ class _AdminOrdersState extends State<AdminOrders> {
 class AdminSettings extends StatelessWidget {
   const AdminSettings({super.key});
   @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(18),children:[
-    const Heading('Yönetim ayarları','Demo sürümünün çalışma sınırları ve yönetim bilgileri.'),
-    const Card(child:ListTile(leading:Icon(Icons.shield_outlined,color:forest),title:Text('Yönetici erişimi'),subtitle:Text('Demo: admin@cafedunyam.local • CafeAdmin123!'))),
-    const Card(child:ListTile(leading:Icon(Icons.payments_outlined,color:brown),title:Text('IBAN / ödeme'),subtitle:Text('Gerçek IBAN henüz tanımlanmadı. Demo IBAN ile ödeme yapmayın.'))),
-    const Card(child:ListTile(leading:Icon(Icons.storage_outlined,color:forest),title:Text('Veri saklama'),subtitle:Text('Hesaplar, başvurular ve kampanyalar yalnızca bu cihazda saklanır.'))),
+    const Heading('Yönetim ayarları','Yönetici erişimi ve hizmet yapılandırması.'),
+    const Card(child:ListTile(leading:Icon(Icons.shield_outlined,color:forest),title:Text('Yönetici erişimi'),subtitle:Text('Yönetici girişi yalnızca onaylı yönetici rolüne sahip bulut hesabıyla yapılır.'))),
+    const Card(child:ListTile(leading:Icon(Icons.payments_outlined,color:brown),title:Text('IBAN / ödeme'),subtitle:Text('Gerçek IBAN tanımlanmadan ödeme bilgisi veya ödeme talebi yayımlanmaz.'))),
+    const Card(child:ListTile(leading:Icon(Icons.storage_outlined,color:forest),title:Text('Veri saklama'),subtitle:Text('Oturum açan kullanıcıların bulut verileri Supabase erişim politikalarıyla korunur; yayından önce uçtan uca yetki testleri tamamlanmalıdır.'))),
     const LocalModeNote(),
   ]);
 }
