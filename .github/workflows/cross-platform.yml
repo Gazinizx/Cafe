@@ -71,15 +71,6 @@ jobs:
       - name: Test
         working-directory: mobil
         run: flutter test
-      - name: Build release APK
-        working-directory: mobil
-        run: flutter build apk --release
-      - uses: actions/upload-artifact@v4
-        with:
-          name: cafe-dunyam-android-apk
-          path: mobil/build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
-          retention-days: 14
 
   ios-simulator:
     runs-on: macos-latest
