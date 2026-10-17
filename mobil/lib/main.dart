@@ -430,7 +430,7 @@ class _AuthPageState extends State<AuthPage> {
 
   Future<void> _resetPassword() async {
     final mail = email.text.trim().toLowerCase();
-    if (!RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$').hasMatch(mail)) {
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(mail)) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Parola sıfırlama bağlantısı için geçerli e-posta adresini yaz.')));
       return;
     }
@@ -609,7 +609,7 @@ class _AuthPageState extends State<AuthPage> {
           sectionTitle('Müşteri bilgileri'),
         ],
       ] else ...[
-        TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-posta', prefixIcon: Icon(Icons.email_outlined)), validator: (v) => v == null || !RegExp(r'^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$').hasMatch(v.trim()) ? 'Geçerli e-posta adresini yaz.' : null),
+        TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-posta', prefixIcon: Icon(Icons.email_outlined)), validator: (v) => v == null || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim()) ? 'Geçerli e-posta adresini yaz.' : null),
         const SizedBox(height: 12),
         TextFormField(controller: password, obscureText: hide, decoration: InputDecoration(labelText: 'Parola', prefixIcon: const Icon(Icons.lock_outline), suffixIcon: IconButton(onPressed: () => setState(() => hide = !hide), icon: Icon(hide ? Icons.visibility : Icons.visibility_off))), validator: (v) => v == null || v.isEmpty ? 'Parolanı yaz.' : null),
         Align(alignment: Alignment.centerRight, child: TextButton(onPressed: busy ? null : _resetPassword, child: const Text('Parolamı unuttum'))),
