@@ -306,6 +306,13 @@ class LocalData {
         return;
       }
     }
+    // Never silently persist a cloud account's data on this device. If a
+    // cloud-backed write was not handled above (for example, a business has
+    // no linked cafe yet), fail visibly instead of creating an iOS-only or
+    // Android-only copy in SharedPreferences.
+    if (_cloudReady) {
+      throw StateError('Bulut eşitlemesi yapılamadı ($key). Hesap ve işletme bağlantısını kontrol et.');
+    }
     final p = await SharedPreferences.getInstance();
     await p.setString(key, jsonEncode(value));
   }
