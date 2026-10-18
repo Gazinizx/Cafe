@@ -12,29 +12,33 @@ const supabasePublishableKey = String.fromEnvironment(
   defaultValue: 'sb_publishable_qOXjE2ZLsFcD3Eg0_XnfVA_Q106MWe_',
 );
 
-// Keep a lazily-created client available to widget tests and to the offline
-// startup path. The main app uses Supabase.instance.client after successful
-// initialization; this client must not be late-final because tests may mount
-// widgets without calling main().
-final SupabaseClient _fallbackCloud = SupabaseClient(supabaseUrl, supabasePublishableKey);
+SupabaseClient? _fallbackCloud;
 bool _supabaseInitialized = false;
 
-Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  // A cloud configuration/initialization problem must never prevent the app
-  // from showing its local-first screens.
+Future<void> initializeSupabase() async {
   try {
     await Supabase.initialize(url: supabaseUrl, publishableKey: supabasePublishableKey);
     _supabaseInitialized = true;
   } catch (error, stackTrace) {
+    // Do not let a cloud startup issue prevent the local entry screen.
     debugPrint('Supabase initialization failed; starting in local mode: $error');
     debugPrintStack(stackTrace: stackTrace);
+    _fallbackCloud = SupabaseClient(supabaseUrl, supabasePublishableKey);
   }
+}
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initializeSupabase();
   runApp(const CafeDunyamApp());
 }
 
-SupabaseClient get cloud =>
-    _supabaseInitialized ? Supabase.instance.client : _fallbackCloud;
+SupabaseClient get cloud {
+  if (_supabaseInitialized) return Supabase.instance.client;
+  final fallback = _fallbackCloud;
+  if (fallback != null) return fallback;
+  throw StateError('Supabase has not been initialized. Call initializeSupabase() first.');
+}
 
 Future<Map<String, dynamic>> cloudProfile(User authUser) async {
   final row = await cloud.from('profiles').select().eq('id', authUser.id).maybeSingle();
