@@ -5,24 +5,33 @@ Flutter tabanlı Android ve iOS uygulaması.
 - `mobil/`: müşteri ve işletme akışları olan Flutter uygulaması.
 - `yonetim/index.html`: tarayıcı içinde çalışan yerel örnek yönetim paneli.
 - `.github/workflows/android-apk.yml`: Android release APK derlemesi ve artifact çıktısı.
-- `.github/workflows/cross-platform.yml`: Android analiz/testleri ve iOS simülatör analiz/test/derlemesi; APK paketlemesi yalnızca ayrı Android iş akışında yapılır.
-- `supabase/schema.sql`: Supabase veritabanı tabloları ve başlangıç RLS politikaları.
+- `.github/workflows/cross-platform.yml`: Android analiz/testleri ve iOS simülatör analiz/test/derlemesi.
+- `supabase/schema.sql` ve `supabase/migrations/20261014000000_initial_schema.sql`: Supabase tabloları ve RLS politikaları.
 - `SUPABASE_SETUP.md`: bulut kurulumu ve güvenlik notları.
 
-## Mevcut uygulama durumu
+## Veri ve platform senkronizasyonu
 
-Uygulamada müşteri/işletme kayıt ekranları, kafe keşfi, kampanyalar, yerel sadakat kartları ve işletme/yönetim ekranları bulunur. NFC eklentisi projede tutulmuştur.
-
-**Önemli:** Mevcut mobil ekranların veri katmanı halen cihazdaki SharedPreferences'a dayanır. Bu nedenle hesaplar, damgalar ve kampanyalar cihazlar arasında henüz otomatik senkronize olmaz. Supabase şeması ve kurulum dokümanı eklendi; mevcut ekranların Supabase Auth ve bulut tablolarına bağlanması, RLS testleri ve gerçek cihaz testleri tamamlanmadan uygulama üretim/yayın için hazır sayılmaz.
+- Kayıt/giriş Supabase Auth üzerinden yapılır. Android ve iOS cihazlarında **aynı Supabase projesi ve aynı kullanıcı hesabı** kullanıldığında, uygulamanın buluta bağladığı profil, kafe, kampanya, kayıtlı kampanya ve işletme başvurusu/sipariş verileri ortak veritabanından okunur.
+- `SharedPreferences` cihaz içi tercih ve oturum saklama gibi yerel amaçlar içindir. Oturum açmış bir bulut hesabının bulut kaydı yapılamazsa veri artık sessizce cihaz belleğine yazılmaz; hata gösterilir.
+- Oturum açılmadan gösterilen örnek kafe/kampanya verileri cihazlar arasında eşitlenmez.
+- Müşteri damga bakiyesi `cafe_memberships` tablosundan okunur. Mobil istemcinin doğrudan damga yazmasına izin verilmez; doğrulanmış satıştan sonra damga veren güvenli sunucu uç noktası ayrıca kurulmalı ve test edilmelidir.
+- Bu depodaki SQL şeması ile migration dosyası aynıdır; ancak SQL'in canlı Supabase projesine gerçekten uygulandığı GitHub derlemesiyle kanıtlanamaz.
 
 ## Supabase kurulumu
 
-`SUPABASE_SETUP.md` dosyasını izleyerek bir Supabase projesi oluştur, `supabase/schema.sql` dosyasını SQL Editor'de çalıştır ve proje URL'si ile public anon/publishable key'i derleme yapılandırmasına ekle. **service_role key'i mobil uygulamaya koyma.**
+`SUPABASE_SETUP.md` dosyasını izleyerek mevcut Supabase projesinde `supabase/schema.sql` dosyasının tamamını çalıştır. Project URL ve publishable/anon key Android ve iOS derlemelerinde aynı olmalı. **service_role key'i mobil uygulamaya veya depoya koyma.**
 
 ## Android APK
 
-GitHub deposunda **Actions → Cafe Dunyam Android APK** iş akışını çalıştır. Başarılı çalıştırmanın Artifacts bölümünde `cafe-dunyam-android-apk` görünür. Derleme sonucu doğrulanmadan APK'nın üretildiği varsayılmamalıdır.
+GitHub'da **Actions → Cafe Dunyam Android APK** iş akışının başarılı çalıştırmasının Artifacts bölümünde `cafe-dunyam-android-apk` bulunur. APK'nın telefonda açılması ve gerçek bulut hesabıyla test edilmesi derlemeden ayrı doğrulamalardır.
 
-## Platform kontrolleri
+## iOS IPA
 
-**Actions → Cafe Dunyam Cross-platform Checks** Android tarafında analiz, test ve release APK derlemesi; iOS tarafında analiz, test ve imzasız simülatör derlemesi çalıştırır. iOS simülatör derlemesi, imzalı gerçek cihaz uygulaması veya App Store yayını anlamına gelmez.
+Bu depoda bir `.ipa` dosyası veya iOS imzalı IPA üretme iş akışı bulunmuyor. **Cross-platform Checks** yalnızca imzasız iOS simülatör uygulaması derler; gerçek iPhone'a kurulabilir IPA için Apple imzalama/provisioning yapılandırmasıyla ayrı bir iOS cihaz derlemesi gerekir. Eski IPA, yeni Android/iOS koduyla aynı sürüm değilse senkronizasyon davranışı da farklı olabilir.
+
+## Yayına çıkmadan önce
+
+- Supabase şemasının canlı projede uygulandığını ve RLS izinlerinin gerçek kullanıcılarla doğrulandığını test et.
+- Android ve iOS'ta aynı hesapla giriş yaparak değişikliklerin diğer cihazda görünmesini uçtan uca doğrula.
+- Gerçek satın alma doğrulaması olmadan sadakat damgası üretme.
+- iOS imzalama, gerçek cihaz testi ve mağaza gönderimi ayrıca tamamlanmalıdır.
