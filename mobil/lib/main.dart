@@ -12,7 +12,11 @@ const supabasePublishableKey = String.fromEnvironment(
   defaultValue: 'sb_publishable_qOXjE2ZLsFcD3Eg0_XnfVA_Q106MWe_',
 );
 
-late final SupabaseClient _fallbackCloud;
+// Keep a lazily-created client available to widget tests and to the offline
+// startup path. The main app uses Supabase.instance.client after successful
+// initialization; this client must not be late-final because tests may mount
+// widgets without calling main().
+final SupabaseClient _fallbackCloud = SupabaseClient(supabaseUrl, supabasePublishableKey);
 bool _supabaseInitialized = false;
 
 Future<void> main() async {
@@ -25,7 +29,6 @@ Future<void> main() async {
   } catch (error, stackTrace) {
     debugPrint('Supabase initialization failed; starting in local mode: $error');
     debugPrintStack(stackTrace: stackTrace);
-    _fallbackCloud = SupabaseClient(supabaseUrl, supabasePublishableKey);
   }
   runApp(const CafeDunyamApp());
 }
