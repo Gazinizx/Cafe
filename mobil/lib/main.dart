@@ -864,14 +864,26 @@ class _BusinessDealsState extends State<BusinessDeals> {
   bool busy = false;
   @override void dispose() { title.dispose(); benefit.dispose(); super.dispose(); }
   bool _canManage(Map<String,dynamic> d) => widget.user['role'] == 'admin' || d['ownerEmail'] == widget.user['email'];
+  void _reportSyncError(Object error) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Buluta kaydedilemedi: $error')),
+    );
+  }
   Future<void> _add() async {
     if (title.text.trim().isEmpty || benefit.text.trim().isEmpty) return;
     setState(() => busy = true);
-    final deals = await LocalData.list(dealsKey, starterDeals);
-    deals.insert(0, {'id':'local-${DateTime.now().microsecondsSinceEpoch}','title':title.text.trim(),'benefit':benefit.text.trim(),'audience':audience,'cafeId':widget.user['cafeId'] ?? widget.user['email'],'active':true,'ownerEmail':widget.user['email'],'ownerName':widget.user['cafeName'] ?? widget.user['name']});
-    await LocalData.saveList(dealsKey, deals);
-    title.clear(); benefit.clear();
-    if (mounted) setState(() => busy = false);
+    try {
+      final deals = await LocalData.list(dealsKey, starterDeals);
+      deals.insert(0, {'id':'local-${DateTime.now().microsecondsSinceEpoch}','title':title.text.trim(),'benefit':benefit.text.trim(),'audience':audience,'cafeId':widget.user['cafeId'] ?? widget.user['email'],'active':true,'ownerEmail':widget.user['email'],'ownerName':widget.user['cafeName'] ?? widget.user['name']});
+      await LocalData.saveList(dealsKey, deals);
+      title.clear(); benefit.clear();
+      if (mounted) setState(() {});
+    } catch (error) {
+      _reportSyncError(error);
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
   }
   Future<void> _edit(Map<String,dynamic> d) async {
     if (!_canManage(d)) return;
@@ -885,31 +897,49 @@ class _BusinessDealsState extends State<BusinessDeals> {
       ]),
       actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Kaydet'))],
     ));
-    if (result == true && editTitle.text.trim().isNotEmpty && editBenefit.text.trim().isNotEmpty) {
-      final deals = await LocalData.list(dealsKey, starterDeals);
-      final i = deals.indexWhere((x) => x['id'] == d['id']);
-      if (i >= 0 && _canManage(deals[i])) {
-        deals[i]['title'] = editTitle.text.trim();
-        deals[i]['benefit'] = editBenefit.text.trim();
-        await LocalData.saveList(dealsKey, deals);
-        if (mounted) setState(() {});
+    try {
+      if (result == true && editTitle.text.trim().isNotEmpty && editBenefit.text.trim().isNotEmpty) {
+        final deals = await LocalData.list(dealsKey, starterDeals);
+        final i = deals.indexWhere((x) => x['id'] == d['id']);
+        if (i >= 0 && _canManage(deals[i])) {
+          deals[i]['title'] = editTitle.text.trim();
+          deals[i]['benefit'] = editBenefit.text.trim();
+          await LocalData.saveList(dealsKey, deals);
+          if (mounted) setState(() {});
+        }
       }
+    } catch (error) {
+      _reportSyncError(error);
+    } finally {
+      editTitle.dispose();
+      editBenefit.dispose();
     }
-    editTitle.dispose(); editBenefit.dispose();
   }
   Future<void> _toggle(Map<String,dynamic> d) async {
     if (!_canManage(d)) return;
-    final deals = await LocalData.list(dealsKey, starterDeals);
-    final i = deals.indexWhere((x) => x['id'] == d['id']);
-    if (i >= 0) { deals[i]['active'] = !(deals[i]['active'] == true); await LocalData.saveList(dealsKey, deals); if (mounted) setState(() {}); }
+    try {
+      final deals = await LocalData.list(dealsKey, starterDeals);
+      final i = deals.indexWhere((x) => x['id'] == d['id']);
+      if (i >= 0) {
+        deals[i]['active'] = !(deals[i]['active'] == true);
+        await LocalData.saveList(dealsKey, deals);
+        if (mounted) setState(() {});
+      }
+    } catch (error) {
+      _reportSyncError(error);
+    }
   }
   Future<void> _delete(String id) async {
-    final deals = await LocalData.list(dealsKey, starterDeals);
-    final target = deals.where((d) => d['id'] == id).toList();
-    if (target.isEmpty || !_canManage(target.first)) return;
-    deals.removeWhere((d) => d['id'] == id);
-    await LocalData.saveList(dealsKey, deals);
-    if (mounted) setState(() {});
+    try {
+      final deals = await LocalData.list(dealsKey, starterDeals);
+      final target = deals.where((d) => d['id'] == id).toList();
+      if (target.isEmpty || !_canManage(target.first)) return;
+      deals.removeWhere((d) => d['id'] == id);
+      await LocalData.saveList(dealsKey, deals);
+      if (mounted) setState(() {});
+    } catch (error) {
+      _reportSyncError(error);
+    }
   }
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
     const Heading('Kampanyalar', 'Yalnızca kendi kampanyalarını yönetebilirsin.'),
