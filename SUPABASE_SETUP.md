@@ -12,8 +12,9 @@ Flutter uygulamasında Supabase Auth ve bulut veri erişimi eklendi. Kafeler, ka
 Canlı veritabanı açıldıktan sonra migration'ları sırayla uygula:
 1. `supabase/migrations/20261014000000_initial_schema.sql`
 2. `supabase/migrations/20261030210000_production_foundation.sql`
+3. `supabase/migrations/20261030214000_security_hardening.sql`
 
-İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Bu migration tek başına NFC kriptografik doğrulama servisini kurmaz. NTAG doğrulaması yapan güvenli Edge Function kurulup gerçek etiketle test edilmeden damga üretimini canlıya açma.
+İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Üçüncü migration RLS yönetim politikalarını daraltır ve yabancı anahtar indekslerini ekler. Bu migration tek başına NFC kriptografik doğrulama servisini kurmaz. NTAG doğrulaması yapan güvenli Edge Function kurulup gerçek etiketle test edilmeden damga üretimini canlıya açma.
 
 Ödeme sağlayıcısı şu aşamada entegre edilmeyecek. İşletmelerden nakit veya banka havalesi alınabilir; tahsilat, yalnızca yönetici tarafından doğrulandıktan sonra onaylanmalıdır. Müşteri/işletme istemcisi kendi ödeme kaydını "ödendi" durumuna getirememelidir.
 
