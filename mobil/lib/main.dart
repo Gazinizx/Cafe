@@ -58,7 +58,7 @@ Future<Map<String, dynamic>> cloudProfile(User authUser) async {
   };
   if (role == 'business') {
     final app = await cloud.from('business_applications').select().eq('business_id', authUser.id).maybeSingle();
-    final cafe = await cloud.from('cafes').select('id,name,city').eq('owner_id', authUser.id).maybeSingle();
+    final cafe = await cloud.from('cafes').select('id,name,city').eq('owner_id', authUser.id).order('is_main_branch', ascending: false).order('created_at', ascending: true).limit(1).maybeSingle();
     if (app != null) {
       user.addAll({
         'cafeName': app['cafe_name'] ?? 'İşletmem',
@@ -275,7 +275,7 @@ class LocalData {
         return;
       }
       if (key == dealsKey) {
-        final cafe = await cloud.from('cafes').select('id').eq('owner_id', auth.id).maybeSingle();
+        final cafe = await cloud.from('cafes').select('id').eq('owner_id', auth.id).order('is_main_branch', ascending: false).order('created_at', ascending: true).limit(1).maybeSingle();
         final ownedCafeId = cafe?['id']?.toString();
         if (ownedCafeId != null) {
           final desired = value.where((d) => d['cafeId'] == ownedCafeId || d['ownerId'] == auth.id || d['ownerEmail'] == auth.email || (d['id']?.toString().startsWith('local-') == true)).toList();
