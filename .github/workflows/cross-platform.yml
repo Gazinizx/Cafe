@@ -94,6 +94,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           import plistlib
+          import re
 
           info_path = Path("ios/Runner/Info.plist")
           with info_path.open("rb") as f:
@@ -114,6 +115,7 @@ jobs:
 
           project_path = Path("ios/Runner.xcodeproj/project.pbxproj")
           project = project_path.read_text()
+          project = re.sub(r"PRODUCT_BUNDLE_IDENTIFIER = [^;]+;", "PRODUCT_BUNDLE_IDENTIFIER = com.cafedunyam.app;", project)
           if "CODE_SIGN_ENTITLEMENTS" not in project:
               project = project.replace(
                   "PRODUCT_BUNDLE_IDENTIFIER =",
