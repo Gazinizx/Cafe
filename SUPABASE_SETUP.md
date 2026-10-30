@@ -25,7 +25,9 @@ Canlı veritabanı açıldıktan sonra migration'ları sırayla uygula:
 11. `supabase/migrations/20261030234000_business_uniqueness.sql`
 12. `supabase/migrations/20261030235000_nfc_branch_metadata_access.sql`
 13. `supabase/migrations/20261030240000_main_branch_default.sql`
-14. `supabase/migrations/20261030241000_private_admin_authorization.sql`
+13. `supabase/migrations/20261030241000_private_admin_authorization.sql`
+14. `supabase/migrations/20261030242000_rls_auth_uid_cache.sql`
+15. `supabase/migrations/20261030243000_rls_policy_consolidation.sql`
 
 İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Üçüncü ve dördüncü migration'lar RLS yetkilerini daraltır, şube/çalışan erişimini düzeltir ve indeksleri ekler. Sonraki migration'lar NFC sayaç tekrar korumasını, ödül teslimini, özel erişim yardımcısını, nakit/havale abonelik tahsilatını ve paket şube/çalışan limitlerini ekler. NTAG doğrulaması yapan `verify-nfc-stamp` Edge Function dağıtıldı ve JWT zorunlu. Gerçek etiketle test etmeden damga üretimini canlıya açma.
 
