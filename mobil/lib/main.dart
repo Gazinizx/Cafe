@@ -85,6 +85,18 @@ Future<Map<String, dynamic>> cloudProfile(User authUser) async {
     }
     final order = await cloud.from('business_orders').select().eq('business_id', authUser.id).order('created_at', ascending: false).limit(1).maybeSingle();
     if (order != null) user['nfcOrder'] = Map<String,dynamic>.from(order['order_data'] as Map);
+  } else if (role == 'customer') {
+    final employeeRows = await cloud.from('business_employees')
+      .select('business_id,branch_id,display_name')
+      .eq('employee_id', authUser.id).eq('is_active', true)
+      .order('created_at', ascending: false).limit(1);
+    if ((employeeRows as List).isNotEmpty) {
+      final employee = Map<String,dynamic>.from(employeeRows.first as Map);
+      user['role'] = 'employee';
+      user['businessId'] = employee['business_id'];
+      user['branchId'] = employee['branch_id'];
+      user['employeeName'] = employee['display_name'] ?? user['name'];
+    }
   }
   return user;
 }
@@ -395,6 +407,8 @@ class _GatePageState extends State<GatePage> {
       page = BusinessReviewPage(user: user);
     } else if (user['role'] == 'business') {
       page = BusinessShell(user: user);
+    } else if (user['role'] == 'employee') {
+      page = EmployeeShell(user: user);
     } else {
       page = CustomerShell(user: user);
     }
@@ -1382,6 +1396,80 @@ class BusinessReviewPage extends StatelessWidget {
     ])),
   );
 }
+class EmployeeShell extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const EmployeeShell({required this.user, super.key});
+  @override State<EmployeeShell> createState() => _EmployeeShellState();
+}
+class _EmployeeShellState extends State<EmployeeShell> {
+  bool _loading = true;
+  List<Map<String,dynamic>> _claims = [];
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    try {
+      final businessId = widget.user['businessId']?.toString();
+      final branchId = widget.user['branchId']?.toString();
+      if (businessId == null) throw StateError('Çalışan işletmesi bulunamadı.');
+      final branches = await cloud.from('cafes').select('id').eq('business_id', businessId).eq('is_active', true);
+      final branchIds = (branches as List).map((r) => r['id'].toString()).toList();
+      if (branchIds.isEmpty) {
+        _claims = [];
+      } else {
+        var query = cloud.from('reward_claims')
+          .select('id,cafe_id,stamps_spent,reward_snapshot,created_at,cafes(name)')
+          .eq('status', 'issued');
+        final rows = branchId != null
+          ? await query.eq('cafe_id', branchId).order('created_at', ascending: false)
+          : await query.inFilter('cafe_id', branchIds).order('created_at', ascending: false);
+        _claims = (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül talepleri yüklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _redeem(String claimId) async {
+    try {
+      final response = await cloud.functions.invoke('redeem-cafe-reward', body: {'claimId': claimId});
+      final data = response.data;
+      if (response.status == 200 && data is Map && data['success'] == true) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ödül teslim edildi olarak işaretlendi.')));
+        await _load();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data is Map ? (data['error'] ?? 'Ödül teslim edilemedi.').toString() : 'Ödül teslim edilemedi.')));
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül teslim edilemedi: $error')));
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return Scaffold(
+      appBar: AppBar(title: const Text('Cafe Dünyam • Çalışan')),
+      body: ListView(padding: const EdgeInsets.all(18), children: [
+        Heading('Merhaba, ${widget.user['employeeName'] ?? widget.user['name']}', 'Bekleyen ödül taleplerini doğrula ve teslim et.'),
+        if (_claims.isEmpty) const Text('Bekleyen ödül talebi yok.'),
+        ..._claims.map((claim) {
+          final id = claim['id'].toString();
+          final code = id.length >= 8 ? id.substring(0, 8).toUpperCase() : id;
+          final reward = claim['reward_snapshot'] is Map ? Map<String,dynamic>.from(claim['reward_snapshot'] as Map) : <String,dynamic>{};
+          final cafe = claim['cafes'] is Map ? Map<String,dynamic>.from(claim['cafes'] as Map) : <String,dynamic>{};
+          return Card(child: ListTile(
+            title: Text((reward['title'] ?? 'Ödül').toString()),
+            subtitle: Text('${cafe['name'] ?? 'Şube'} • Kod: $code • ${claim['stamps_spent']} damga'),
+            trailing: IconButton(icon: const Icon(Icons.check_circle_outline), tooltip: 'Teslim edildi', onPressed: () => _redeem(id)),
+          ));
+        }),
+      ]),
+    );
+  }
+}
+
 class AdminShell extends StatefulWidget {
   final Map<String,dynamic> user;
   const AdminShell({required this.user, super.key});
