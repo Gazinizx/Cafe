@@ -25,9 +25,9 @@ Canlı veritabanı açıldıktan sonra migration'ları sırayla uygula:
 11. `supabase/migrations/20261030234000_business_uniqueness.sql`
 12. `supabase/migrations/20261030235000_nfc_branch_metadata_access.sql`
 13. `supabase/migrations/20261030240000_main_branch_default.sql`
-13. `supabase/migrations/20261030241000_private_admin_authorization.sql`
-14. `supabase/migrations/20261030242000_rls_auth_uid_cache.sql`
-15. `supabase/migrations/20261030243000_rls_policy_consolidation.sql`
+14. `supabase/migrations/20261030241000_private_admin_authorization.sql`
+15. `supabase/migrations/20261030242000_rls_auth_uid_cache.sql`
+16. `supabase/migrations/20261030243000_rls_policy_consolidation.sql`
 
 İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Üçüncü ve dördüncü migration'lar RLS yetkilerini daraltır, şube/çalışan erişimini düzeltir ve indeksleri ekler. Sonraki migration'lar NFC sayaç tekrar korumasını, ödül teslimini, özel erişim yardımcısını, nakit/havale abonelik tahsilatını ve paket şube/çalışan limitlerini ekler. NTAG doğrulaması yapan `verify-nfc-stamp` Edge Function dağıtıldı ve JWT zorunlu. Gerçek etiketle test etmeden damga üretimini canlıya açma.
 
@@ -73,7 +73,7 @@ GitHub yetkilendirmesi, Supabase projesi oluşturma ve hesap onayı kullanıcı 
 ## 6. Yayına çıkmadan önce
 - SQL şemasının gerçekten uygulandığını ve yeni bir müşteri/işletme hesabıyla tabloların oluştuğunu doğrula.
 - Gerçek NTAG 424 DNA etiketi, AES anahtarı ve Edge Function secret ayarlanmadan NFC damgası üretme; doğrudan istemci yazma izni verme.
-- Admin işlemlerini yalnızca güvenilir sunucu tarafı yönetim aracıyla yap.
+- Yönetim işlemlerini yalnızca `admin` rolüne sahip hesapla yap; kullanıcı rolü istemci metadata'sından alınmaz.
 - Android gerçek cihaz, iOS gerçek cihaz, çevrimdışı durum, hesap kurtarma ve RLS testlerini tamamla.
 - iOS için Apple imzalama ve App Store Connect erişimi gerekir.
 
@@ -82,7 +82,8 @@ Uygulama kodu ve sunucu uç noktaları bulut veri erişimini kullanır; ancak ge
 
 ## NFC etiketi ve ödül güvenli kurulumu
 
-- Edge Function: `supabase/functions/verify-nfc-stamp/index.ts`
+- Edge Function'lar: `verify-nfc-stamp`, `claim-cafe-reward`, `redeem-cafe-reward`, `find-business-employee`, `manage-nfc-tag`, `admin-delete-user`.
+- NFC doğrulama kodu: `supabase/functions/verify-nfc-stamp/index.ts`
 - Kriptografi: `supabase/functions/_shared/ntag424.js`
 - Testler: `supabase/functions/_shared/ntag424_test.ts`
 - Sunucu anahtarları istemciye veya GitHub deposuna konulmaz. Supabase Edge Function Secrets alanında `NFC_SDM_KEYS_JSON` tanımla. JSON anahtarları, veritabanındaki `nfc_tags.secret_reference` değerleriyle eşleşmelidir; değerler 16 baytlık AES anahtarlarının 32 karakterlik hex karşılığıdır.
