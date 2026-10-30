@@ -112,7 +112,7 @@ jobs:
           if "CODE_SIGN_ENTITLEMENTS" not in project:
               project = project.replace(
                   "PRODUCT_BUNDLE_IDENTIFIER =",
-                  "CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;\\n                PRODUCT_BUNDLE_IDENTIFIER ="
+                  "CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;\n                PRODUCT_BUNDLE_IDENTIFIER ="
               )
           project = project.replace("IPHONEOS_DEPLOYMENT_TARGET = 12.0;", "IPHONEOS_DEPLOYMENT_TARGET = 13.0;")
           project_path.write_text(project)
