@@ -11,7 +11,7 @@ Not: Bu proje `eu-west-3` (Paris) bölgesindedir. Supabase'in yayımladığı g�
 
 ## 2. Şemaları uygulama
 
-Canlı veritabanı açıldıktan sonra migration'ları sırayla uygula:
+Önemli: Mevcut `phsmojbrbszobpyeeipc` Cafe Dünyam projesinde migration'lar zaten uygulanmıştır. Supabase migration geçmişinde 19 kayıt bulunuyor; 15 adet `public` tablonun tamamı mevcut ve RLS etkin. **Bu mevcut projede aşağıdaki SQL dosyalarını yeniden çalıştırma.** Aşağıdaki liste depodaki kaynak dosyaların sırasını gösterir. Canlı veritabanındaki ilk üç tarihli bootstrap kaydı (`cafe_dunyam_initial_schema`, `restrict_internal_function_execution`, `restore_policy_helper_permissions`) depodaki migration dosyalarıyla birebir aynı dosya adlarına sahip değildir; bu nedenle bu liste tek başına yeni bir Supabase projesini sıfırdan kurmak için kullanılmamalıdır. Yeni proje kurulumu gerekirse önce bu tarihsel bootstrap SQL'leri de kaynak koda eklenip temiz kurulum testi yapılmalıdır.
 1. `supabase/migrations/20261014000000_initial_schema.sql`
 2. `supabase/migrations/20261030210000_production_foundation.sql`
 3. `supabase/migrations/20261030214000_security_hardening.sql`
