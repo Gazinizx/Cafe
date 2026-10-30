@@ -1125,8 +1125,24 @@ class _BusinessBillingState extends State<BusinessBilling> {
         .eq('business_id', widget.user['id']).order('created_at', ascending: false);
       final subscriptionRows = await cloud.from('business_subscriptions').select('*, subscription_packages(name,billing_period)')
         .eq('business_id', widget.user['id']).order('created_at', ascending: false);
+      final businessRows = await cloud.from('profiles').select('id,full_name,email')
+        .eq('role', 'business').eq('approval_status', 'approved').order('full_name');
+      final branchRows = await cloud.from('cafes').select('id,name,business_id,is_active')
+        .eq('is_active', true).order('name');
+      final tagRows = await cloud.from('nfc_tags')
+        .select('id,business_id,branch_id,tag_uid,status,provisioned_at').order('created_at', ascending: false);
       _packages = (packageRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
       _payments = (paymentRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _businesses = (businessRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _branchesForTags = (branchRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _tags = (tagRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      if (_selectedBusinessId == null || !_businesses.any((b) => b['id'].toString() == _selectedBusinessId)) {
+        _selectedBusinessId = _businesses.isEmpty ? null : _businesses.first['id'].toString();
+      }
+      final availableBranches = _branchesForTags.where((b) => b['business_id'].toString() == _selectedBusinessId).toList();
+      if (_selectedBranchId == null || !availableBranches.any((b) => b['id'].toString() == _selectedBranchId)) {
+        _selectedBranchId = availableBranches.isEmpty ? null : availableBranches.first['id'].toString();
+      }
       _subscriptions = (subscriptionRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
       if (_selectedPackage == null || !_packages.any((p) => p['id'].toString() == _selectedPackage)) {
         _selectedPackage = _packages.isEmpty ? null : _packages.first['id'].toString();
@@ -1809,13 +1825,17 @@ class _AdminBillingState extends State<AdminBilling> {
   final _price = TextEditingController();
   final _branches = TextEditingController(text: '1');
   final _employees = TextEditingController(text: '2');
+  final _tagUid = TextEditingController();
+  final _secretReference = TextEditingController();
   String _period = 'monthly';
+  String? _selectedBusinessId, _selectedBranchId;
+  List<Map<String,dynamic>> _businesses = [], _branchesForTags = [], _tags = [];
   bool _loading = true, _saving = false;
   List<Map<String,dynamic>> _packages = [];
   List<Map<String,dynamic>> _payments = [];
 
   @override void initState() { super.initState(); _load(); }
-  @override void dispose() { _name.dispose(); _description.dispose(); _price.dispose(); _branches.dispose(); _employees.dispose(); super.dispose(); }
+  @override void dispose() { _name.dispose(); _description.dispose(); _price.dispose(); _branches.dispose(); _employees.dispose(); _tagUid.dispose(); _secretReference.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     try {
@@ -1829,6 +1849,42 @@ class _AdminBillingState extends State<AdminBilling> {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket ve tahsilatlar yüklenemedi: $error')));
     } finally {
       if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _registerNfcTag() async {
+    if (_selectedBusinessId == null || _selectedBranchId == null || _tagUid.text.trim().isEmpty || _secretReference.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('İşletme, şube, etiket UID ve anahtar referansı gerekli.')));
+      return;
+    }
+    try {
+      final response = await cloud.functions.invoke('manage-nfc-tag', body: {
+        'action': 'register',
+        'businessId': _selectedBusinessId,
+        'branchId': _selectedBranchId,
+        'tagUid': _tagUid.text.trim(),
+        'secretReference': _secretReference.text.trim(),
+      });
+      final data = response.data;
+      if (response.status != 200 || data is! Map || data['success'] != true) {
+        throw StateError(data is Map ? (data['error'] ?? 'NFC etiketi kaydedilemedi.').toString() : 'NFC etiketi kaydedilemedi.');
+      }
+      _tagUid.clear(); _secretReference.clear();
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NFC etiketi işletmeye bağlandı.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('NFC etiketi kaydedilemedi: $error')));
+    }
+  }
+
+  Future<void> _revokeNfcTag(String id) async {
+    try {
+      final response = await cloud.functions.invoke('manage-nfc-tag', body: {'action': 'revoke', 'tagId': id});
+      final data = response.data;
+      if (response.status != 200 || data is! Map || data['success'] != true) throw StateError('NFC etiketi iptal edilemedi.');
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('NFC etiketi iptal edilemedi: $error')));
     }
   }
 
@@ -1978,6 +2034,42 @@ class _AdminBillingState extends State<AdminBilling> {
           Switch(value: p['is_active'] == true, onChanged: (value) => _togglePackage(p, value)),
         ]),
       ))),
+      const SizedBox(height: 24),
+      const Text('NFC etiketleri', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
+      const Text('Her işletmeye tek NTAG 424 DNA etiketi bağlanır. Etiketi önce SDM modunda programla ve anahtarını Edge Function Secrets içine ekle.'),
+      DropdownButtonFormField<String>(
+        value: _selectedBusinessId,
+        decoration: const InputDecoration(labelText: 'İşletme'),
+        items: _businesses.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text((b['full_name'] ?? b['email'] ?? 'İşletme').toString()))).toList(),
+        onChanged: (value) => setState(() {
+          _selectedBusinessId = value;
+          final branches = _branchesForTags.where((b) => b['business_id'].toString() == value).toList();
+          _selectedBranchId = branches.isEmpty ? null : branches.first['id'].toString();
+        }),
+      ),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        value: _selectedBranchId,
+        decoration: const InputDecoration(labelText: 'Etiketin kullanılacağı şube'),
+        items: _branchesForTags.where((b) => b['business_id'].toString() == _selectedBusinessId)
+          .map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name'].toString()))).toList(),
+        onChanged: (value) => setState(() => _selectedBranchId = value),
+      ),
+      const SizedBox(height: 8),
+      TextField(controller: _tagUid, decoration: const InputDecoration(labelText: 'NTAG 424 DNA UID (14 hex karakter)')),
+      const SizedBox(height: 8),
+      TextField(controller: _secretReference, decoration: const InputDecoration(labelText: 'Edge secret anahtar referansı')),
+      const SizedBox(height: 10),
+      FilledButton.icon(onPressed: _registerNfcTag, icon: const Icon(Icons.nfc), label: const Text('NFC etiketini bağla')),
+      ..._tags.map((tag) {
+        final business = _businesses.where((b) => b['id'] == tag['business_id']).toList();
+        final branch = _branchesForTags.where((b) => b['id'] == tag['branch_id']).toList();
+        return Card(child: ListTile(
+          title: Text(tag['tag_uid'].toString()),
+          subtitle: Text('${business.isEmpty ? 'İşletme' : (business.first['full_name'] ?? business.first['email'])} • ${branch.isEmpty ? 'Şube' : branch.first['name']} • ${tag['status']}'),
+          trailing: tag['status'] == 'active' ? IconButton(tooltip: 'Etiketi iptal et', onPressed: () => _revokeNfcTag(tag['id'].toString()), icon: const Icon(Icons.block)) : const Icon(Icons.block, color: Colors.grey),
+        ));
+      }),
       const SizedBox(height: 24),
       const Text('Tahsilat talepleri', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
       if (_payments.isEmpty) const Text('Henüz tahsilat talebi yok.'),
