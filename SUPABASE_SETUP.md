@@ -4,7 +4,7 @@ Flutter uygulamasında Supabase Auth ve bulut veri erişimi eklendi. Kafeler, ka
 
 ## 1. Supabase projesi
 1. Daha önce oluşturduğun `phsmojbrbszobpyeeipc` projesini aç; yeni proje oluşturma.
-2. SQL Editor'de `supabase/schema.sql` dosyasının tamamını çalıştır.
+2. Proje URL ve publishable key bilgilerini not et. Şema uygulamasını aşağıdaki 2. bölümdeki migration sırasına göre yap.
 3. Project Settings → API bölümündeki Project URL ve publishable key'in uygulamadaki değerlerle eşleştiğini kontrol et. **service_role key'i mobil uygulamaya veya depoya koyma.**
 
 ## 2. Şemaları uygulama
