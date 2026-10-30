@@ -1126,24 +1126,8 @@ class _BusinessBillingState extends State<BusinessBilling> {
         .eq('business_id', widget.user['id']).order('created_at', ascending: false);
       final subscriptionRows = await cloud.from('business_subscriptions').select('*, subscription_packages(name,billing_period)')
         .eq('business_id', widget.user['id']).order('created_at', ascending: false);
-      final businessRows = await cloud.from('profiles').select('id,full_name,email')
-        .eq('role', 'business').eq('approval_status', 'approved').order('full_name');
-      final branchRows = await cloud.from('cafes').select('id,name,business_id,is_active')
-        .eq('is_active', true).order('name');
-      final tagRows = await cloud.from('nfc_tags')
-        .select('id,business_id,branch_id,tag_uid,status,provisioned_at').order('created_at', ascending: false);
       _packages = (packageRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
       _payments = (paymentRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
-      _businesses = (businessRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
-      _branchesForTags = (branchRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
-      _tags = (tagRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
-      if (_selectedBusinessId == null || !_businesses.any((b) => b['id'].toString() == _selectedBusinessId)) {
-        _selectedBusinessId = _businesses.isEmpty ? null : _businesses.first['id'].toString();
-      }
-      final availableBranches = _branchesForTags.where((b) => b['business_id'].toString() == _selectedBusinessId).toList();
-      if (_selectedBranchId == null || !availableBranches.any((b) => b['id'].toString() == _selectedBranchId)) {
-        _selectedBranchId = availableBranches.isEmpty ? null : availableBranches.first['id'].toString();
-      }
       _subscriptions = (subscriptionRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
       if (_selectedPackage == null || !_packages.any((p) => p['id'].toString() == _selectedPackage)) {
         _selectedPackage = _packages.isEmpty ? null : _packages.first['id'].toString();
@@ -1844,8 +1828,24 @@ class _AdminBillingState extends State<AdminBilling> {
       final paymentRows = await cloud.from('manual_payments')
         .select('*, profiles(full_name,email), subscription_packages(name,billing_period)')
         .order('created_at', ascending: false);
+      final businessRows = await cloud.from('profiles').select('id,full_name,email')
+        .eq('role', 'business').eq('approval_status', 'approved').order('full_name');
+      final branchRows = await cloud.from('cafes').select('id,name,business_id,is_active')
+        .eq('is_active', true).order('name');
+      final tagRows = await cloud.from('nfc_tags')
+        .select('id,business_id,branch_id,tag_uid,status,provisioned_at').order('created_at', ascending: false);
       _packages = (packageRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
       _payments = (paymentRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _businesses = (businessRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _branchesForTags = (branchRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _tags = (tagRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      if (_selectedBusinessId == null || !_businesses.any((b) => b['id'].toString() == _selectedBusinessId)) {
+        _selectedBusinessId = _businesses.isEmpty ? null : _businesses.first['id'].toString();
+      }
+      final availableBranches = _branchesForTags.where((b) => b['business_id'].toString() == _selectedBusinessId).toList();
+      if (_selectedBranchId == null || !availableBranches.any((b) => b['id'].toString() == _selectedBranchId)) {
+        _selectedBranchId = availableBranches.isEmpty ? null : availableBranches.first['id'].toString();
+      }
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket ve tahsilatlar yüklenemedi: $error')));
     } finally {
@@ -2030,7 +2030,7 @@ class _AdminBillingState extends State<AdminBilling> {
       ..._packages.map((p) => Card(child: ListTile(
         title: Text('${p['name']} • ${(p['price_try'] as num).toStringAsFixed(2)} TL'),
         subtitle: Text('${p['billing_period'] == 'yearly' ? 'Yıllık' : 'Aylık'} • ${p['branch_limit']} şube • ${p['employee_limit']} çalışan'),
-        trailing: Wrap(mainAxisSize: MainAxisSize.min, crossAxisAlignment: WrapCrossAlignment.center, children: [
+        trailing: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: [
           IconButton(tooltip: 'Düzenle', onPressed: () => _editPackage(p), icon: const Icon(Icons.edit_outlined)),
           Switch(value: p['is_active'] == true, onChanged: (value) => _togglePackage(p, value)),
         ]),
