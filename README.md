@@ -14,7 +14,7 @@ Flutter tabanlı Android ve iOS uygulaması.
 - Kayıt/giriş Supabase Auth üzerinden yapılır. Android ve iOS cihazlarında **aynı Supabase projesi ve aynı kullanıcı hesabı** kullanıldığında, uygulamanın buluta bağladığı profil, kafe, kampanya, kayıtlı kampanya ve işletme başvurusu/sipariş verileri ortak veritabanından okunur.
 - `SharedPreferences` cihaz içi tercih ve oturum saklama gibi yerel amaçlar içindir. Oturum açmış bir bulut hesabının bulut kaydı yapılamazsa veri artık sessizce cihaz belleğine yazılmaz; hata gösterilir.
 - Oturum açılmadan gösterilen örnek kafe/kampanya verileri cihazlar arasında eşitlenmez.
-- Müşteri damga bakiyesi `cafe_memberships` tablosundan okunur. Mobil istemcinin doğrudan damga yazmasına izin verilmez; NTAG doğrulamasını yapan güvenli Edge Function kurulup gerçek etiketle test edilmeden damga verme açılmaz.
+- Müşteri damga bakiyesi `cafe_memberships` tablosundan okunur. Mobil istemcinin doğrudan damga yazmasına izin verilmez; NTAG 424 DNA doğrulama Edge Function'ı dağıtıldı; sunucu anahtarı ve fiziksel etiket yapılandırılmadan NFC damga işlemi başarılı olmaz.
 - İşletme tahsilatları şu aşamada çevrim içi ödeme sağlayıcısı olmadan nakit veya banka havalesiyle yönetilir. Ödeme durumunu yalnızca yönetici doğrular.
 - Bu depodaki SQL şeması ile migration dosyası aynıdır; ancak SQL'in canlı Supabase projesine gerçekten uygulandığı GitHub derlemesiyle kanıtlanamaz.
 
@@ -34,5 +34,5 @@ Bu depoda bir `.ipa` dosyası veya iOS imzalı IPA üretme iş akışı bulunmuy
 
 - Supabase şemasının canlı projede uygulandığını ve RLS izinlerinin gerçek kullanıcılarla doğrulandığını test et.
 - Android ve iOS'ta aynı hesapla giriş yaparak değişikliklerin diğer cihazda görünmesini uçtan uca doğrula.
-- Gerçek satın alma doğrulaması olmadan sadakat damgası üretme.
+- Gerçek NTAG 424 DNA etiketi ve sunucu anahtarıyla sayaç/tekrar testleri tamamlanmadan NFC özelliğini üretimde kullanma.
 - iOS imzalama, gerçek cihaz testi ve mağaza gönderimi ayrıca tamamlanmalıdır.
