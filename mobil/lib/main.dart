@@ -998,6 +998,31 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
     }
   }
 
+  Future<List<Map<String,dynamic>>> _pendingClaims() async {
+    final cafeId = widget.user['cafeId']?.toString();
+    if (cafeId == null) return [];
+    final rows = await cloud.from('reward_claims')
+      .select('id,stamps_spent,reward_snapshot,created_at')
+      .eq('cafe_id', cafeId).eq('status', 'issued')
+      .order('created_at', ascending: false);
+    return (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+  }
+
+  Future<void> _redeem(String claimId) async {
+    try {
+      final response = await cloud.functions.invoke('redeem-cafe-reward', body: {'claimId': claimId});
+      final data = response.data;
+      if (response.status == 200 && data is Map && data['success'] == true) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ödül teslim edildi olarak işaretlendi.')));
+        if (mounted) setState(() {});
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data is Map ? (data['error'] ?? 'Ödül teslim edilemedi.').toString() : 'Ödül teslim edilemedi.')));
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül teslim edilemedi: $error')));
+    }
+  }
+
   @override Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
     return ListView(padding: const EdgeInsets.all(20), children: [
@@ -1019,6 +1044,27 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
         onPressed: _saving ? null : _save,
         icon: const Icon(Icons.save_outlined),
         label: Text(_saving ? 'Kaydediliyor…' : 'Ödül ayarlarını kaydet'),
+      ),
+      const SizedBox(height: 24),
+      const Text('Bekleyen ödül talepleri', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      FutureBuilder<List<Map<String,dynamic>>>(
+        future: _pendingClaims(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
+          if (snapshot.hasError) return const Text('Ödül talepleri yüklenemedi.');
+          final claims = snapshot.data ?? [];
+          if (claims.isEmpty) return const Padding(padding: EdgeInsets.only(top: 8), child: Text('Bekleyen ödül talebi yok.'));
+          return Column(children: claims.map((claim) {
+            final id = claim['id'].toString();
+            final code = id.length >= 8 ? id.substring(0, 8).toUpperCase() : id;
+            final reward = claim['reward_snapshot'] is Map ? Map<String,dynamic>.from(claim['reward_snapshot'] as Map) : <String,dynamic>{};
+            return Card(child: ListTile(
+              title: Text((reward['title'] ?? 'Ödül talebi').toString()),
+              subtitle: Text('Kod: $code • ${claim['stamps_spent'] ?? 0} damga'),
+              trailing: TextButton(onPressed: () => _redeem(id), child: const Text('Teslim edildi')),
+            ));
+          }).toList());
+        },
       ),
     ]);
   }
