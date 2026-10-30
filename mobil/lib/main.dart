@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:nfc_manager/nfc_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -723,8 +724,103 @@ class CafeDetailPage extends StatelessWidget{
 
 class CustomerCards extends StatefulWidget{const CustomerCards({super.key});@override State<CustomerCards> createState()=>_CustomerCardsState();}
 class _CustomerCardsState extends State<CustomerCards>{
+ bool _scanning = false;
+
+ Uri? _readSecureTagUri(NdefRecord record) {
+   if (String.fromCharCodes(record.type) != 'U' || record.payload.isEmpty) return null;
+   const prefixes = <int, String>{
+     0x00: '', 0x01: 'http://www.', 0x02: 'https://www.',
+     0x03: 'http://', 0x04: 'https://',
+   };
+   final prefix = prefixes[record.payload.first];
+   if (prefix == null || !prefix.startsWith('https://')) return null;
+   try {
+     final suffix = utf8.decode(record.payload.sublist(1), allowMalformed: false);
+     final uri = Uri.tryParse('$prefix$suffix');
+     return uri != null && uri.scheme == 'https' ? uri : null;
+   } catch (_) {
+     return null;
+   }
+ }
+
+ void _message(String value) {
+   if (!mounted) return;
+   ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(value)));
+ }
+
+ Future<void> _scanNfc() async {
+   if (cloud.auth.currentUser == null) {
+     _message('NFC damgası almak için müşteri hesabınla giriş yapmalısın.');
+     return;
+   }
+   try {
+     final available = await NfcManager.instance.isAvailable();
+     if (!available) {
+       _message('Bu telefonda NFC bulunmuyor veya NFC kapalı.');
+       return;
+     }
+     setState(() => _scanning = true);
+     var handled = false;
+     await NfcManager.instance.startSession(
+       onDiscovered: (NfcTag tag) async {
+         if (handled) return;
+         handled = true;
+         try {
+           final ndef = Ndef.from(tag);
+           if (ndef == null) throw Exception('Bu etiket NDEF desteklemiyor.');
+           final message = ndef.cachedMessage;
+           if (message == null) throw Exception('Etiketten güvenli bağlantı okunamadı.');
+           Uri? secureUri;
+           for (final record in message.records) {
+             secureUri = _readSecureTagUri(record);
+             if (secureUri != null) break;
+           }
+           if (secureUri == null) throw Exception('Bu, kayıtlı Cafe Dünyam güvenli NFC etiketi değil.');
+           await NfcManager.instance.stopSession();
+           final response = await cloud.functions.invoke(
+             'verify-nfc-stamp',
+             body: {'url': secureUri.toString()},
+           );
+           final data = response.data;
+           if (response.status != 200 || data is! Map) {
+             throw Exception('NFC doğrulaması tamamlanamadı.');
+           }
+           if (data['success'] == true) {
+             _message('Damgan eklendi. Toplam damgan: ${data['stamps'] ?? 0}');
+           } else {
+             _message((data['message'] ?? data['error'] ?? 'Bu NFC okutması kabul edilmedi.').toString());
+           }
+           if (mounted) setState(() {});
+         } catch (error) {
+           try { await NfcManager.instance.stopSession(errorMessage: 'NFC işlemi tamamlanamadı.'); } catch (_) {}
+           _message(error.toString().replaceFirst('Exception: ', ''));
+         } finally {
+           if (mounted) setState(() => _scanning = false);
+         }
+       },
+       onError: (error) {
+         if (mounted) setState(() => _scanning = false);
+         _message('NFC oturumu tamamlanamadı. Tekrar dene.');
+       },
+     );
+   } catch (error) {
+     try { await NfcManager.instance.stopSession(); } catch (_) {}
+     if (mounted) setState(() => _scanning = false);
+     _message('NFC başlatılamadı. Telefon ayarlarını kontrol et.');
+   }
+ }
+
  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
  const Heading('Kartlarım','Her kafenin damga kartı ayrıdır.'),
+ FilledButton.icon(
+   onPressed: _scanning ? null : _scanNfc,
+   icon: const Icon(Icons.nfc),
+   label: Text(_scanning ? 'Etiketi okut...' : 'NFC ile damga kazan'),
+ ),
+ const Padding(
+   padding: EdgeInsets.only(top: 8, bottom: 12),
+   child: Text('Kasiyerden tek NFC etiketini al, telefonunun NFC alanına yaklaştır ve işlem bitince etiketi geri ver.'),
+ ),
  FutureBuilder<List<Object>>(future:Future.wait([LocalData.list(cafesKey,starterCafes),LocalData.stamps()]),builder:(context,s){
  if(!s.hasData)return const Center(child:CircularProgressIndicator());
  final cafes=s.data![0] as List<Map<String,dynamic>>;final stamps=s.data![1] as Map<String,int>;
