@@ -129,3 +129,17 @@ jobs:
       - name: Build iOS simulator app
         working-directory: mobil
         run: flutter build ios --simulator --no-codesign
+
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Test NTAG 424 DNA cryptography
+        run: deno test supabase/functions/_shared/ntag424_test.ts
+      - name: Type-check NFC Edge Function
+        run: deno check supabase/functions/verify-nfc-stamp/index.ts
