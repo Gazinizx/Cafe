@@ -1,3 +1,183 @@
-<!doctype html><html lang="tr"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Cafe Dünyam Yönetim</title><style>body{margin:0;background:#f7f1e5;color:#24392e;font:15px system-ui}.wrap{max-width:1000px;margin:auto;padding:22px}.hero{background:#174c3c;color:white;padding:24px;border-radius:20px}.note{background:#e8dcc7;padding:13px;border-radius:12px;line-height:1.5;margin:15px 0}.tabs,form{display:flex;gap:8px;flex-wrap:wrap;margin:15px 0}button{border:0;padding:11px 14px;border-radius:9px;cursor:pointer}.tabs button,.go{background:#174c3c;color:white}.panel{background:white;padding:18px;border-radius:15px;margin:14px 0}input{padding:11px;border:1px solid #ddd;border-radius:9px;flex:1;min-width:120px}table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:10px;border-bottom:1px solid #eee}.del{background:#eee7db;color:#174c3c}.hide{display:none}@media(max-width:600px){.wrap{padding:12px}td,th{font-size:12px;padding:6px}}</style><body><main class="wrap"><header class="hero"><h1>☕ Cafe Dünyam</h1><p>Kafe ve kampanya yönetim paneli</p></header><div class="note"><b>Veritabanı olmadan:</b> bilgiler yalnızca bu tarayıcıda saklanır. Mobil uygulamaya eşitlenmez; gerçek kullanıcı girişi ve yetkilendirme yoktur.</div><nav class="tabs"><button onclick="tab('cafes')">Kafeler</button><button onclick="tab('offers')">Kampanyalar</button><button onclick="backup()">JSON yedekle</button></nav><section id="cafes" class="panel"><h2>Kafe ekle</h2><form id="cf"><input name="name" placeholder="Kafe adı" required><input name="city" placeholder="Şehir" required><input name="type" placeholder="Kategori" required><input name="goal" type="number" value="8" min="1" required><button class="go">Ekle</button></form><table><thead><tr><th>Kafe</th><th>Şehir</th><th>Kategori</th><th>Hedef</th><th></th></tr></thead><tbody id="cr"></tbody></table></section><section id="offers" class="panel hide"><h2>Kampanya ekle</h2><form id="of"><input name="title" placeholder="Kampanya adı" required><input name="benefit" placeholder="Avantaj / indirim" required><input name="audience" placeholder="Hedef kitle" required><button class="go">Ekle</button></form><table><thead><tr><th>Kampanya</th><th>Avantaj</th><th>Hedef</th><th></th></tr></thead><tbody id="or"></tbody></table></section></main><script>
-const c0=[{name:"Kahve Durağı",city:"İstanbul",type:"Kahve ve tatlı",goal:8},{name:"Mola Coffee",city:"Ankara",type:"Modern kahve",goal:6}],o0=[{title:"Öğrenci fırsatı",benefit:"%15 indirim",audience:"Öğrenci"}];function read(k,d){try{return JSON.parse(localStorage.getItem(k))||d.map(x=>({...x}))}catch(e){return d.map(x=>({...x}))}}let cs=read("cafe-cs",c0),os=read("cafe-os",o0);function esc(v){return String(v).replace(/[&<>"']/g,a=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[a]))}function save(){localStorage.setItem("cafe-cs",JSON.stringify(cs));localStorage.setItem("cafe-os",JSON.stringify(os));render()}function render(){cr.innerHTML=cs.map((v,i)=>'<tr><td>'+esc(v.name)+'</td><td>'+esc(v.city)+'</td><td>'+esc(v.type)+'</td><td>'+v.goal+'</td><td><button class="del" onclick="cs.splice('+i+',1);save()">Sil</button></td></tr>').join("");or.innerHTML=os.map((v,i)=>'<tr><td>'+esc(v.title)+'</td><td>'+esc(v.benefit)+'</td><td>'+esc(v.audience)+'</td><td><button class="del" onclick="os.splice('+i+',1);save()">Sil</button></td></tr>').join("")}function tab(id){document.querySelectorAll("section").forEach(s=>s.classList.toggle("hide",s.id!==id))}cf.onsubmit=e=>{e.preventDefault();let d=Object.fromEntries(new FormData(cf));cs.push({name:d.name,city:d.city,type:d.type,goal:+d.goal});cf.reset();save()};of.onsubmit=e=>{e.preventDefault();os.push(Object.fromEntries(new FormData(of)));of.reset();save()};function backup(){let a=document.createElement("a"),u=URL.createObjectURL(new Blob([JSON.stringify({cafes:cs,offers:os},null,2)],{type:"application/json"}));a.href=u;a.download="cafe-dunyam-yedek.json";a.click();URL.revokeObjectURL(u)}render();
-</script></body></html>
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#174c3c">
+<title>Cafe Dünyam | Yönetim</title>
+<style>
+:root{color-scheme:light;--green:#174c3c;--deep:#102f27;--cream:#f6f1e7;--paper:#fffdf8;--line:#e7dfd2;--muted:#77756e;--orange:#bd7544;--red:#a33c32}
+*{box-sizing:border-box}body{margin:0;background:var(--cream);color:#24352d;font:15px Inter,system-ui,-apple-system,Segoe UI,sans-serif}button,input,select,textarea{font:inherit}button{cursor:pointer;border:0;border-radius:10px;padding:10px 14px;background:var(--green);color:#fff;font-weight:650}button.secondary{background:#e9eee9;color:var(--green)}button.danger{background:#f7e8e5;color:var(--red)}button:disabled{opacity:.5;cursor:not-allowed}.hidden{display:none!important}
+header{height:68px;background:var(--deep);color:#fff;display:flex;align-items:center;justify-content:space-between;padding:0 24px;position:sticky;top:0;z-index:3}.brand{font-weight:800;letter-spacing:.2px}.brand span{color:#e5bb84}.account{display:flex;gap:12px;align-items:center;color:#dce8df;font-size:13px}
+.login-wrap{min-height:calc(100vh - 68px);display:grid;place-items:center;padding:24px}.login{width:min(440px,100%);background:var(--paper);border:1px solid var(--line);border-radius:22px;padding:30px;box-shadow:0 12px 36px #1a342414}.login h1{margin:0 0 8px;font-size:27px}.login p{color:var(--muted);line-height:1.5}
+label{display:block;font-size:13px;font-weight:650;margin:12px 0 6px}input,select,textarea{width:100%;border:1px solid var(--line);background:#fff;border-radius:10px;padding:11px 12px;color:#25362e;outline:none}input:focus,select:focus,textarea:focus{border-color:#6b9b81;box-shadow:0 0 0 3px #174c3c12}
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr);min-height:calc(100vh - 68px)}aside{background:#fff;border-right:1px solid var(--line);padding:18px 12px}nav{display:grid;gap:5px}nav button{background:transparent;color:#52645a;text-align:left;font-weight:600}nav button.active,nav button:hover{background:#eaf0e9;color:var(--green)}main{padding:26px;max-width:1400px;width:100%;margin:0 auto}.page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-bottom:22px}.page-head h1{margin:0;font-size:26px}.page-head p{margin:6px 0 0;color:var(--muted)}
+.cards{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:20px}.stat,.panel{background:var(--paper);border:1px solid var(--line);border-radius:16px;padding:18px}.stat small{color:var(--muted)}.stat strong{display:block;font-size:27px;margin-top:7px;color:var(--green)}
+.panel{margin-bottom:16px}.panel h2{font-size:18px;margin:0 0 14px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 14px}.form-actions{display:flex;justify-content:flex-end;margin-top:14px}
+.table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:650px}th,td{text-align:left;padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:middle}th{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}td small{display:block;color:var(--muted);margin-top:4px}.actions{display:flex;gap:7px;flex-wrap:wrap}.pill{display:inline-block;border-radius:99px;padding:4px 9px;background:#e8eee8;color:var(--green);font-size:12px;font-weight:700}.pill.pending{background:#fff0d9;color:#8a5b1d}.pill.rejected{background:#f7e8e5;color:var(--red)}.empty{padding:24px;text-align:center;color:var(--muted)}.notice{padding:12px 14px;border-radius:12px;background:#edf2eb;color:#355642;margin-bottom:14px;line-height:1.5}.error{background:#f8eae7;color:#8b352d}.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:14px}.toolbar input{max-width:280px}.toast{position:fixed;bottom:20px;right:20px;background:var(--deep);color:white;padding:13px 17px;border-radius:12px;box-shadow:0 8px 30px #0002;z-index:9;max-width:min(420px,90vw)}
+@media(max-width:900px){.cards{grid-template-columns:repeat(2,minmax(0,1fr))}.layout{grid-template-columns:1fr}aside{border-right:0;border-bottom:1px solid var(--line);padding:8px;overflow:auto}nav{display:flex;min-width:max-content}nav button{white-space:nowrap;padding:9px 12px}main{padding:18px}}
+@media(max-width:560px){header{padding:0 14px}.account span{display:none}.cards{grid-template-columns:1fr 1fr;gap:8px}.stat{padding:13px}.stat strong{font-size:22px}main{padding:13px}.form-grid{grid-template-columns:1fr}.page-head h1{font-size:22px}}
+</style>
+</head>
+<body>
+<header><div class="brand">☕ Cafe <span>Dünyam</span> <small style="font-weight:500;color:#c8d8ce">/ Yönetim</small></div><div class="account"><span id="adminEmail"></span><button id="logoutBtn" class="secondary hidden">Çıkış</button></div></header>
+<section id="loginView" class="login-wrap"><form id="loginForm" class="login"><h1>Yönetici girişi</h1><p>Cafe Dünyam sistem yönetim paneline giriş yap.</p><label>E-posta</label><input id="email" type="email" autocomplete="username" required><label>Parola</label><input id="password" type="password" autocomplete="current-password" required><div class="form-actions"><button type="submit">Giriş yap</button></div><div id="loginMessage" class="notice hidden"></div></form></section>
+<div id="appView" class="layout hidden">
+<aside><nav id="nav">
+<button class="active" data-tab="overview">Genel bakış</button>
+<button data-tab="applications">İşletme başvuruları</button>
+<button data-tab="packages">Abonelik paketleri</button>
+<button data-tab="payments">Nakit / havale</button>
+<button data-tab="nfc">NFC etiketleri</button>
+<button data-tab="campaigns">Kampanyalar</button>
+</nav></aside>
+<main>
+<section id="tab-overview">
+<div class="page-head"><div><h1>Genel bakış</h1><p>Platformun güncel durumu</p></div><button class="secondary" data-refresh>Yenile</button></div>
+<div class="cards"><div class="stat"><small>İşletmeler</small><strong id="statBusinesses">—</strong></div><div class="stat"><small>Onay bekleyen</small><strong id="statPending">—</strong></div><div class="stat"><small>Aktif abonelik</small><strong id="statSubs">—</strong></div><div class="stat"><small>Bekleyen tahsilat</small><strong id="statPayments">—</strong></div></div>
+<div class="panel"><h2>Yönetim notu</h2><div class="notice">Nakit ve banka havalesi tahsilatları yönetici onayıyla aboneliğe çevrilir. NFC damgaları yalnızca sunucu tarafında NTAG 424 DNA doğrulamasıyla verilir.</div></div>
+</section>
+<section id="tab-applications" class="hidden"><div class="page-head"><div><h1>İşletme başvuruları</h1><p>Başvuruları incele ve işletmeleri etkinleştir.</p></div><button class="secondary" data-refresh>Yenile</button></div><div class="panel"><div id="applicationsTable" class="table-wrap"></div></div></section>
+<section id="tab-packages" class="hidden"><div class="page-head"><div><h1>Abonelik paketleri</h1><p>Fiyatları, dönemleri ve kullanım limitlerini yönet.</p></div></div>
+<div class="panel"><h2>Yeni paket</h2><form id="packageForm"><div class="form-grid"><div><label>Paket adı</label><input id="pkgName" required></div><div><label>Fiyat (TL)</label><input id="pkgPrice" type="number" min="0" step="0.01" required></div><div><label>Dönem</label><select id="pkgPeriod"><option value="monthly">Aylık</option><option value="yearly">Yıllık</option></select></div><div><label>Şube limiti</label><input id="pkgBranches" type="number" min="1" value="1" required></div><div><label>Çalışan limiti</label><input id="pkgEmployees" type="number" min="1" value="1" required></div><div><label>Açıklama</label><input id="pkgDescription"></div></div><div class="form-actions"><button type="submit">Paketi ekle</button></div></form></div>
+<div class="panel"><h2>Mevcut paketler</h2><div id="packagesTable" class="table-wrap"></div></div></section>
+<section id="tab-payments" class="hidden"><div class="page-head"><div><h1>Nakit / havale tahsilatları</h1><p>Onaylanan tahsilat aboneliği otomatik etkinleştirir.</p></div><button class="secondary" data-refresh>Yenile</button></div><div class="panel"><div id="paymentsTable" class="table-wrap"></div></div></section>
+<section id="tab-nfc" class="hidden"><div class="page-head"><div><h1>NFC etiketleri</h1><p>Her işletmeye tek NTAG 424 DNA etiketi bağla veya iptal et.</p></div></div>
+<div class="panel"><h2>Etiket bağla</h2><div class="notice">Önce etiketi SDM modunda programla ve anahtarını Supabase Edge Function Secrets içinde NFC_SDM_KEYS_JSON olarak tanımla. Anahtar bu panelde veya uygulamada gösterilmez.</div>
+<form id="nfcForm"><div class="form-grid"><div><label>İşletme</label><select id="nfcBusiness" required></select></div><div><label>Şube</label><select id="nfcBranch" required></select></div><div><label>Etiket UID (14 hex karakter)</label><input id="nfcUid" pattern="[A-Fa-f0-9]{14}" required></div><div><label>Anahtar referansı</label><input id="nfcSecret" pattern="[A-Za-z0-9_-]{3,80}" required></div></div><div class="form-actions"><button type="submit">Etiketi işletmeye bağla</button></div></form></div>
+<div class="panel"><h2>Kayıtlı etiketler</h2><div id="tagsTable" class="table-wrap"></div></div></section>
+<section id="tab-campaigns" class="hidden"><div class="page-head"><div><h1>Kampanyalar</h1><p>İşletmelerin yayınladığı kampanyaları denetle.</p></div><button class="secondary" data-refresh>Yenile</button></div><div class="panel"><div id="campaignsTable" class="table-wrap"></div></div></section>
+</main></div>
+<div id="toast" class="toast hidden"></div>
+<script type="module">
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+const SUPABASE_URL = "https://phsmojbrbszobpyeeipc.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_qOXjE2ZLsFcD3Eg0_XnfVA_Q106MWe_";
+const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
+const $ = (id) => document.getElementById(id);
+let businesses = [], branches = [], packages = [], tags = [];
+const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const money = v => new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY"}).format(Number(v||0));
+const pill = s => '<span class="pill '+(s==="pending"?"pending":s==="rejected"?"rejected":"")+'">'+esc(({pending:"Bekliyor",approved:"Onaylandı",confirmed:"Tahsil edildi",rejected:"Reddedildi",active:"Aktif",revoked:"İptal"}[s]||s))+'</span>';
+function toast(message,error=false){const el=$("toast");el.textContent=message;el.style.background=error?"#8b352d":"#102f27";el.classList.remove("hidden");setTimeout(()=>el.classList.add("hidden"),3500)}
+function showLogin(message=""){ $("appView").classList.add("hidden");$("loginView").classList.remove("hidden");$("logoutBtn").classList.add("hidden");$("loginMessage").textContent=message;$("loginMessage").classList.toggle("hidden",!message); }
+function showApp(user){$("loginView").classList.add("hidden");$("appView").classList.remove("hidden");$("logoutBtn").classList.remove("hidden");$("adminEmail").textContent=user.email||"";}
+async function requireAdmin(){
+ const {data:{user},error}=await db.auth.getUser();
+ if(error||!user){showLogin();return false}
+ const {data:profile,error:profileError}=await db.from("profiles").select("role,approval_status").eq("id",user.id).maybeSingle();
+ if(profileError||profile?.role!=="admin"||profile?.approval_status!=="approved"){await db.auth.signOut();showLogin("Bu hesap sistem yöneticisi değil.");return false}
+ showApp(user);return true;
+}
+async function loadOverview(){
+ const [b,p,s,m]=await Promise.all([
+  db.from("profiles").select("id",{count:"exact",head:true}).eq("role","business"),
+  db.from("profiles").select("id",{count:"exact",head:true}).eq("role","business").eq("approval_status","pending"),
+  db.from("business_subscriptions").select("id",{count:"exact",head:true}).eq("status","active"),
+  db.from("manual_payments").select("id",{count:"exact",head:true}).eq("status","pending")
+ ]);
+ $("statBusinesses").textContent=b.count??"—";$("statPending").textContent=p.count??"—";$("statSubs").textContent=s.count??"—";$("statPayments").textContent=m.count??"—";
+}
+async function loadApplications(){
+ const {data,error}=await db.from("business_applications").select("business_id,cafe_name,phone,business_type,province,district,business_address,application_status,profiles(full_name,email)").order("created_at",{ascending:false});
+ if(error)throw error;
+ $("applicationsTable").innerHTML=data.length?'<table><thead><tr><th>İşletme</th><th>İletişim</th><th>Konum</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>'+data.map(a=>'<tr><td><b>'+esc(a.cafe_name)+'</b><small>'+esc(a.business_type)+'</small></td><td>'+esc(a.profiles?.full_name)+'<small>'+esc(a.profiles?.email)+' • '+esc(a.phone)+'</small></td><td>'+esc(a.district)+' / '+esc(a.province)+'<small>'+esc(a.business_address)+'</small></td><td>'+pill(a.application_status)+'</td><td><div class="actions">'+(a.application_status==="pending"?'<button data-action="approve-business" data-id="'+esc(a.business_id)+'">Onayla</button><button class="danger" data-action="reject-business" data-id="'+esc(a.business_id)+'">Reddet</button>':'—')+'</div></td></tr>').join("")+'</tbody></table>':'<div class="empty">Başvuru bulunmuyor.</div>';
+}
+async function setBusinessStatus(id,status){
+ const {error:e1}=await db.from("profiles").update({approval_status:status}).eq("id",id);
+ if(e1)throw e1;
+ const {error:e2}=await db.from("business_applications").update({application_status:status}).eq("business_id",id);
+ if(e2)throw e2;
+ const {error:e3}=await db.from("cafes").update({is_active:status==="approved"}).eq("business_id",id);
+ if(e3)throw e3;
+ toast(status==="approved"?"İşletme onaylandı.":"Başvuru reddedildi.");await loadApplications();await loadOverview();
+}
+async function loadPackages(){
+ const {data,error}=await db.from("subscription_packages").select("*").order("created_at",{ascending:false});if(error)throw error;packages=data;
+ $("packagesTable").innerHTML=data.length?'<table><thead><tr><th>Paket</th><th>Fiyat</th><th>Limitler</th><th>Durum</th><th></th></tr></thead><tbody>'+data.map(p=>'<tr><td><b>'+esc(p.name)+'</b><small>'+esc(p.description)+'</small></td><td>'+money(p.price_try)+'<small>'+(p.billing_period==="yearly"?"Yıllık":"Aylık")+'</small></td><td>'+esc(p.branch_limit)+' şube • '+esc(p.employee_limit)+' çalışan</td><td>'+pill(p.is_active?"active":"rejected")+'</td><td><div class="actions"><button class="secondary" data-action="edit-package" data-id="'+esc(p.id)+'">Düzenle</button><button data-action="toggle-package" data-id="'+esc(p.id)+'" data-active="'+(!p.is_active)+'">'+(p.is_active?"Pasifleştir":"Etkinleştir")+'</button></div></td></tr>').join("")+'</tbody></table>':'<div class="empty">Henüz paket eklenmedi.</div>';
+}
+async function loadPayments(){
+ const {data,error}=await db.from("manual_payments").select("id,business_id,amount_try,payment_method,status,created_at,profiles(full_name,email),subscription_packages(name,billing_period)").order("created_at",{ascending:false});if(error)throw error;
+ $("paymentsTable").innerHTML=data.length?'<table><thead><tr><th>İşletme</th><th>Paket</th><th>Tutar</th><th>Yöntem</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>'+data.map(p=>'<tr><td><b>'+esc(p.profiles?.full_name||"İşletme")+'</b><small>'+esc(p.profiles?.email)+'</small></td><td>'+esc(p.subscription_packages?.name||"Paket")+'<small>'+(p.subscription_packages?.billing_period==="yearly"?"Yıllık":"Aylık")+'</small></td><td>'+money(p.amount_try)+'</td><td>'+(p.payment_method==="cash"?"Nakit":"Banka havalesi")+'</td><td>'+pill(p.status)+'</td><td>'+(p.status==="pending"?'<div class="actions"><button data-action="confirm-payment" data-id="'+esc(p.id)+'">Tahsilatı onayla</button><button class="danger" data-action="reject-payment" data-id="'+esc(p.id)+'">Reddet</button></div>':'—')+'</td></tr>').join("")+'</tbody></table>':'<div class="empty">Tahsilat talebi bulunmuyor.</div>';
+}
+async function loadNfc(){
+ const [b,c,t]=await Promise.all([
+  db.from("profiles").select("id,full_name,email").eq("role","business").eq("approval_status","approved").order("full_name"),
+  db.from("cafes").select("id,name,business_id").eq("is_active",true).order("name"),
+  db.from("nfc_tags").select("id,business_id,branch_id,tag_uid,status,provisioned_at").order("created_at",{ascending:false})
+ ]);
+ if(b.error)throw b.error;if(c.error)throw c.error;if(t.error)throw t.error;
+ businesses=b.data;branches=c.data;tags=t.data;
+ $("nfcBusiness").innerHTML=businesses.map(x=>'<option value="'+esc(x.id)+'">'+esc(x.full_name||x.email)+'</option>').join("");
+ updateBranchOptions();
+ $("tagsTable").innerHTML=tags.length?'<table><thead><tr><th>UID</th><th>İşletme</th><th>Şube</th><th>Durum</th><th></th></tr></thead><tbody>'+tags.map(t=>{const b=businesses.find(x=>x.id===t.business_id),c=branches.find(x=>x.id===t.branch_id);return '<tr><td>'+esc(t.tag_uid)+'</td><td>'+esc(b?.full_name||b?.email||"İşletme")+'</td><td>'+esc(c?.name||"Şube")+'</td><td>'+pill(t.status)+'</td><td>'+(t.status==="active"?'<button class="danger" data-action="revoke-tag" data-id="'+esc(t.id)+'">İptal et</button>':'—')+'</td></tr>'}).join("")+'</tbody></table>':'<div class="empty">Henüz NFC etiketi bağlanmadı.</div>';
+}
+function updateBranchOptions(){const id=$("nfcBusiness").value;const rows=branches.filter(b=>b.business_id===id);$("nfcBranch").innerHTML=rows.map(b=>'<option value="'+esc(b.id)+'">'+esc(b.name)+'</option>').join("");}
+async function loadCampaigns(){
+ const {data,error}=await db.from("campaigns").select("id,title,benefit,audience,is_active,cafes(name,business_id)").order("created_at",{ascending:false});if(error)throw error;
+ $("campaignsTable").innerHTML=data.length?'<table><thead><tr><th>Kampanya</th><th>İşletme</th><th>Avantaj</th><th>Hedef</th><th>Durum</th><th></th></tr></thead><tbody>'+data.map(c=>'<tr><td>'+esc(c.title)+'</td><td>'+esc(c.cafes?.name)+'</td><td>'+esc(c.benefit)+'</td><td>'+esc(c.audience)+'</td><td>'+pill(c.is_active?"active":"rejected")+'</td><td><button class="secondary" data-action="toggle-campaign" data-id="'+esc(c.id)+'" data-active="'+(!c.is_active)+'">'+(c.is_active?"Pasifleştir":"Etkinleştir")+'</button></td></tr>').join("")+'</tbody></table>':'<div class="empty">Kampanya bulunmuyor.</div>';
+}
+async function loadTab(tab){
+ try{
+  if(tab==="overview")await loadOverview();
+  if(tab==="applications")await loadApplications();
+  if(tab==="packages")await loadPackages();
+  if(tab==="payments")await loadPayments();
+  if(tab==="nfc")await loadNfc();
+  if(tab==="campaigns")await loadCampaigns();
+ }catch(e){toast(e.message||"Veriler yüklenemedi.",true)}
+}
+async function activateTab(tab){
+ document.querySelectorAll("[data-tab]").forEach(b=>b.classList.toggle("active",b.dataset.tab===tab));
+ document.querySelectorAll("main section").forEach(s=>s.classList.toggle("hidden",s.id!=="tab-"+tab));
+ await loadTab(tab);
+}
+$("loginForm").addEventListener("submit",async e=>{
+ e.preventDefault();$("loginMessage").classList.add("hidden");
+ const {error}=await db.auth.signInWithPassword({email:$("email").value.trim(),password:$("password").value});
+ if(error){showLogin(error.message);return}
+ if(await requireAdmin())await activateTab("overview");
+});
+$("logoutBtn").addEventListener("click",async()=>{await db.auth.signOut();showLogin()});
+document.querySelectorAll("[data-tab]").forEach(b=>b.addEventListener("click",()=>activateTab(b.dataset.tab)));
+document.querySelectorAll("[data-refresh]").forEach(b=>b.addEventListener("click",()=>{const active=document.querySelector("[data-tab].active")?.dataset.tab||"overview";loadTab(active)}));
+$("packageForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const payload={name:$("pkgName").value.trim(),description:$("pkgDescription").value.trim(),price_try:Number($("pkgPrice").value),billing_period:$("pkgPeriod").value,branch_limit:Number($("pkgBranches").value),employee_limit:Number($("pkgEmployees").value),is_active:true};
+ const {error}=await db.from("subscription_packages").insert(payload);if(error){toast(error.message,true);return}
+ e.target.reset();$("pkgBranches").value="1";$("pkgEmployees").value="1";toast("Paket eklendi.");await loadPackages();
+});
+$("nfcBusiness").addEventListener("change",updateBranchOptions);
+$("nfcForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const {data,error}=await db.functions.invoke("manage-nfc-tag",{body:{action:"register",businessId:$("nfcBusiness").value,branchId:$("nfcBranch").value,tagUid:$("nfcUid").value.trim(),secretReference:$("nfcSecret").value.trim()}});
+ if(error){toast(error.message,true);return}if(!data?.success){toast(data?.error||"Etiket kaydedilemedi.",true);return}
+ $("nfcUid").value="";$("nfcSecret").value="";toast(data.message||"Etiket bağlandı.");await loadNfc();
+});
+document.addEventListener("click",async e=>{
+ const btn=e.target.closest("[data-action]");if(!btn)return;
+ const id=btn.dataset.id,action=btn.dataset.action;
+ try{
+  if(action==="approve-business")await setBusinessStatus(id,"approved");
+  if(action==="reject-business")await setBusinessStatus(id,"rejected");
+  if(action==="confirm-payment"){const {error}=await db.rpc("confirm_manual_payment",{p_payment_id:id});if(error)throw error;toast("Tahsilat onaylandı; abonelik etkinleştirildi.");await loadPayments();await loadOverview();}
+  if(action==="reject-payment"){const {error}=await db.from("manual_payments").update({status:"rejected"}).eq("id",id).eq("status","pending");if(error)throw error;toast("Tahsilat reddedildi.");await loadPayments();await loadOverview();}
+  if(action==="toggle-package"){const {error}=await db.from("subscription_packages").update({is_active:btn.dataset.active==="true",updated_at:new Date().toISOString()}).eq("id",id);if(error)throw error;await loadPackages();}
+  if(action==="edit-package"){
+   const p=packages.find(x=>x.id===id);if(!p)return;
+   const name=prompt("Paket adı",p.name);if(name===null)return;
+   const price=prompt("Fiyat (TL)",p.price_try);if(price===null)return;
+   const period=prompt("Dönem: monthly veya yearly",p.billing_period);if(period===null)return;
+   const branches=prompt("Şube limiti",p.branch_limit);if(branches===null)return;
+   const employees=prompt("Çalışan limiti",p.employee_limit);if(employees===null)return;
+   const {error}=await db.from("subscription_packages").update({name:name.trim(),price_try:Number(price),billing_period:period,branch_limit:Number(branches),employee_limit:Number(employees),updated_at:new Date().toISOString()}).eq("id",id);if(error)throw error;await loadPackages();
+  }
+  if(action==="revoke-tag"){const {data,error}=await db.functions.invoke("manage-nfc-tag",{body:{action:"revoke",tagId:id}});if(error)throw error;if(!data?.success)throw new Error(data?.error||"Etiket iptal edilemedi.");toast("NFC etiketi iptal edildi.");await loadNfc();}
+  if(action==="toggle-campaign"){const {error}=await db.from("campaigns").update({is_active:btn.dataset.active==="true"}).eq("id",id);if(error)throw error;await loadCampaigns();}
+ }catch(error){toast(error.message||"İşlem tamamlanamadı.",true)}
+});
+if(await requireAdmin())await activateTab("overview");
+db.auth.onAuthStateChange(async(event,session)=>{if(event==="SIGNED_OUT"||!session)showLogin()});
+</script>
+</body>
+</html>
