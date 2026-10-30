@@ -142,9 +142,17 @@ jobs:
       - name: Install dependencies
         working-directory: mobil
         run: flutter pub get
-      - name: Generate iOS launcher icon
+      - name: Generate iOS launcher icon only
         working-directory: mobil
-        run: dart run flutter_launcher_icons
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('pubspec.yaml')
+          s = p.read_text()
+          s = s.replace('  android: true\n', '  android: false\n')
+          p.write_text(s)
+          PY
+          dart run flutter_launcher_icons
       - name: Analyze
         working-directory: mobil
         run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
