@@ -11,3 +11,6 @@ major_version = 15
 
 [studio]
 enabled = true
+
+[functions.verify-nfc-stamp]
+verify_jwt = true
