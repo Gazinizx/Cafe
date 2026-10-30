@@ -211,7 +211,7 @@ using (public.is_cafe_admin()) with check (public.is_cafe_admin());
 
 
 -- Restrict NFC metadata reads to safe columns; secret references remain server-only.
-revoke select on public.nfc_tags from anon, authenticated;
+revoke all on table public.nfc_tags from anon, authenticated;
 grant select (id, business_id, tag_uid, status, provisioned_at, last_used_at, created_at)
   on public.nfc_tags to authenticated;
 
