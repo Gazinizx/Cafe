@@ -161,6 +161,13 @@ jobs:
         run: deno test supabase/functions/_shared/ntag424_test.ts
       - name: Type-check NFC Edge Function
         run: deno check supabase/functions/verify-nfc-stamp/index.ts
+      - name: Type-check all authenticated Edge Functions
+        run: |
+          deno check supabase/functions/claim-cafe-reward/index.ts
+          deno check supabase/functions/redeem-cafe-reward/index.ts
+          deno check supabase/functions/find-business-employee/index.ts
+          deno check supabase/functions/manage-nfc-tag/index.ts
+          deno check supabase/functions/admin-delete-user/index.ts
       - name: Check web admin JavaScript syntax
         run: |
           python3 - <<'PY'
