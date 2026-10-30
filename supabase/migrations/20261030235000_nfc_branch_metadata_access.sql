@@ -1,0 +1,1 @@
+grant select (branch_id) on public.nfc_tags to authenticated;

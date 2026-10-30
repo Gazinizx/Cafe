@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: ["main"]
 
+concurrency:
+  group: cafe-cross-platform-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -27,11 +31,14 @@ jobs:
       - name: Generate Android platform files
         working-directory: mobil
         run: flutter create --platforms=android --project-name cafe_dunyam .
+      - name: Install isolated icon tooling
+        run: |
+          python3 -m venv /tmp/cafe-icon-venv
+          /tmp/cafe-icon-venv/bin/pip install cairosvg
       - name: Generate launcher icon
         working-directory: mobil
         run: |
-          python3 -m pip install --user cairosvg
-          python3 - <<'PY'
+          /tmp/cafe-icon-venv/bin/python - <<'PY'
           import cairosvg
           cairosvg.svg2png(url="assets/cafe_icon.svg", write_to="assets/app_icon.png", output_width=512, output_height=512)
           PY
@@ -84,9 +91,68 @@ jobs:
       - name: Generate iOS platform files
         working-directory: mobil
         run: flutter create --platforms=ios --project-name cafe_dunyam .
+      - name: Configure iOS NFC reader permission
+        working-directory: mobil
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+          import re
+
+          info_path = Path("ios/Runner/Info.plist")
+          with info_path.open("rb") as f:
+              info = plistlib.load(f)
+          info["CFBundleDisplayName"] = "Cafe Dünyam"
+          info["NFCReaderUsageDescription"] = "Cafe Dünyam sadakat damgası kazanmak için işletmenin NFC etiketini okur."
+          with info_path.open("wb") as f:
+              plistlib.dump(info, f)
+
+          entitlements_path = Path("ios/Runner/Runner.entitlements")
+          entitlements = {}
+          if entitlements_path.exists():
+              with entitlements_path.open("rb") as f:
+                  entitlements = plistlib.load(f)
+          entitlements["com.apple.developer.nfc.readersession.formats"] = ["NDEF"]
+          with entitlements_path.open("wb") as f:
+              plistlib.dump(entitlements, f)
+
+          project_path = Path("ios/Runner.xcodeproj/project.pbxproj")
+          project = project_path.read_text()
+          project = re.sub(r"PRODUCT_BUNDLE_IDENTIFIER = [^;]+;", "PRODUCT_BUNDLE_IDENTIFIER = com.cafedunyam.app;", project)
+          if "CODE_SIGN_ENTITLEMENTS" not in project:
+              project = project.replace(
+                  "PRODUCT_BUNDLE_IDENTIFIER =",
+                  "CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;\n                PRODUCT_BUNDLE_IDENTIFIER ="
+              )
+          project = project.replace("IPHONEOS_DEPLOYMENT_TARGET = 12.0;", "IPHONEOS_DEPLOYMENT_TARGET = 13.0;")
+          project_path.write_text(project)
+          PY
+      - name: Install Cairo and isolated icon tooling
+        run: |
+          brew install cairo
+          python3 -m venv /tmp/cafe-icon-venv
+          /tmp/cafe-icon-venv/bin/pip install cairosvg
+      - name: Generate launcher icon source
+        working-directory: mobil
+        run: |
+          /tmp/cafe-icon-venv/bin/python - <<'PY'
+          import cairosvg
+          cairosvg.svg2png(url="assets/cafe_icon.svg", write_to="assets/app_icon.png", output_width=512, output_height=512)
+          PY
       - name: Install dependencies
         working-directory: mobil
         run: flutter pub get
+      - name: Generate iOS launcher icon only
+        working-directory: mobil
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('pubspec.yaml')
+          s = p.read_text()
+          s = s.replace('  android: true\n', '  android: false\n')
+          p.write_text(s)
+          PY
+          dart run flutter_launcher_icons
       - name: Analyze
         working-directory: mobil
         run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
@@ -96,3 +162,36 @@ jobs:
       - name: Build iOS simulator app
         working-directory: mobil
         run: flutter build ios --simulator --no-codesign
+
+  backend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+      - name: Test NTAG 424 DNA cryptography
+        run: deno test supabase/functions/_shared/ntag424_test.ts
+      - name: Type-check NFC Edge Function
+        run: deno check supabase/functions/verify-nfc-stamp/index.ts
+      - name: Type-check all authenticated Edge Functions
+        run: |
+          deno check supabase/functions/claim-cafe-reward/index.ts
+          deno check supabase/functions/redeem-cafe-reward/index.ts
+          deno check supabase/functions/find-business-employee/index.ts
+          deno check supabase/functions/manage-nfc-tag/index.ts
+          deno check supabase/functions/admin-delete-user/index.ts
+      - name: Check web admin JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path("yonetim/index.html").read_text()
+          match = re.search(r'<script type="module">(.*?)</script>', html, re.S)
+          if not match:
+              raise SystemExit("Admin module script was not found")
+          Path("/tmp/cafe-admin.mjs").write_text(match.group(1))
+          PY
+          node --check /tmp/cafe-admin.mjs

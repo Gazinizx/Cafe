@@ -7,6 +7,10 @@ on:
   pull_request:
     branches: ["main"]
 
+concurrency:
+  group: cafe-android-apk-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -29,12 +33,15 @@ jobs:
           cache: true
       - name: Android platform dosyalarını oluştur
         working-directory: mobil
-        run: flutter create --platforms=android --project-name cafe_dunyam .
+        run: flutter create --platforms=android --org com.cafedunyam --project-name app .
+      - name: Simge dönüştürme aracını izole kur
+        run: |
+          python3 -m venv /tmp/cafe-icon-venv
+          /tmp/cafe-icon-venv/bin/pip install cairosvg
       - name: Logo dosyasını Android simgesine hazırla
         working-directory: mobil
         run: |
-          python3 -m pip install --user cairosvg
-          python3 - <<'PY'
+          /tmp/cafe-icon-venv/bin/python - <<'PY'
           import cairosvg
           cairosvg.svg2png(url="assets/cafe_icon.svg", write_to="assets/app_icon.png", output_width=512, output_height=512)
           PY
@@ -43,11 +50,22 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path("android/app/src/main/AndroidManifest.xml")
           s = p.read_text()
           if "android.permission.NFC" not in s:
               s = s.replace("<application", '    <uses-permission android:name="android.permission.NFC" />\n    <application', 1)
-              p.write_text(s)
+          if "android.hardware.nfc" not in s:
+              s = s.replace("<application", '    <uses-feature android:name="android.hardware.nfc" android:required="false" />\n    <application', 1)
+          s = re.sub(r'android:label="[^"]+"', 'android:label="Cafe Dünyam"', s, count=1)
+          p.write_text(s)
+          for gradle in Path("android/app").glob("build.gradle*"):
+              g = gradle.read_text()
+              g = re.sub(r'(?m)^\s*applicationId\s*(?:=\s*)?"[^"]+"', 'applicationId = "com.cafedunyam.app"', g)
+              g = re.sub(r'(?m)^\s*namespace\s*(?:=\s*)?"[^"]+"', 'namespace = "com.cafedunyam.app"', g)
+              if "com.cafedunyam.app" not in g:
+                  raise SystemExit(f"Android package id could not be set: {gradle}")
+              gradle.write_text(g)
           PY
       - name: Paketleri indir
         working-directory: mobil
@@ -69,9 +87,17 @@ jobs:
               p.write_text(updated)
               print(f'compileSdk 35 ayarlandı: {p}')
           PY
-      - name: Android uygulama simgesini üret
+      - name: Android derlemesinde yalnız Android simgesini üret
         working-directory: mobil
-        run: dart run flutter_launcher_icons
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('pubspec.yaml')
+          s = p.read_text()
+          s = s.replace('  ios: true\n', '  ios: false\n')
+          p.write_text(s)
+          PY
+          dart run flutter_launcher_icons
       - name: APK derle
         working-directory: mobil
         run: flutter build apk --release

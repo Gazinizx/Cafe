@@ -7,7 +7,25 @@ extra_search_path = ["public", "extensions"]
 max_rows = 1000
 
 [db]
-major_version = 15
+major_version = 17
 
 [studio]
 enabled = true
+
+[functions.verify-nfc-stamp]
+verify_jwt = true
+
+[functions.claim-cafe-reward]
+verify_jwt = true
+
+[functions.redeem-cafe-reward]
+verify_jwt = true
+
+[functions.find-business-employee]
+verify_jwt = true
+
+[functions.manage-nfc-tag]
+verify_jwt = true
+
+[functions.admin-delete-user]
+verify_jwt = true

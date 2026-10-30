@@ -3,10 +3,10 @@
 Flutter tabanlı Android ve iOS uygulaması.
 
 - `mobil/`: müşteri ve işletme akışları olan Flutter uygulaması.
-- `yonetim/index.html`: tarayıcı içinde çalışan yerel örnek yönetim paneli.
+- `yonetim/index.html`: Supabase Auth ile giriş yapılan web yönetim paneli.
 - `.github/workflows/android-apk.yml`: Android release APK derlemesi ve artifact çıktısı.
 - `.github/workflows/cross-platform.yml`: Android analiz/testleri ve iOS simülatör analiz/test/derlemesi.
-- `supabase/schema.sql` ve `supabase/migrations/20261014000000_initial_schema.sql`: Supabase tabloları ve RLS politikaları.
+- `supabase/schema.sql` ve `supabase/migrations/`: Supabase tabloları ve RLS politikaları. Üretim temeli migration'ı şube/çalışan, NFC kayıt defteri, ödül, paket/abonelik ve manuel tahsilat tablolarını ekler.
 - `SUPABASE_SETUP.md`: bulut kurulumu ve güvenlik notları.
 
 ## Veri ve platform senkronizasyonu
@@ -14,7 +14,8 @@ Flutter tabanlı Android ve iOS uygulaması.
 - Kayıt/giriş Supabase Auth üzerinden yapılır. Android ve iOS cihazlarında **aynı Supabase projesi ve aynı kullanıcı hesabı** kullanıldığında, uygulamanın buluta bağladığı profil, kafe, kampanya, kayıtlı kampanya ve işletme başvurusu/sipariş verileri ortak veritabanından okunur.
 - `SharedPreferences` cihaz içi tercih ve oturum saklama gibi yerel amaçlar içindir. Oturum açmış bir bulut hesabının bulut kaydı yapılamazsa veri artık sessizce cihaz belleğine yazılmaz; hata gösterilir.
 - Oturum açılmadan gösterilen örnek kafe/kampanya verileri cihazlar arasında eşitlenmez.
-- Müşteri damga bakiyesi `cafe_memberships` tablosundan okunur. Mobil istemcinin doğrudan damga yazmasına izin verilmez; doğrulanmış satıştan sonra damga veren güvenli sunucu uç noktası ayrıca kurulmalı ve test edilmelidir.
+- Müşteri damga bakiyesi `cafe_memberships` tablosundan okunur. Mobil istemcinin doğrudan damga yazmasına izin verilmez; NTAG 424 DNA doğrulama Edge Function'ı dağıtıldı; sunucu anahtarı ve fiziksel etiket yapılandırılmadan NFC damga işlemi başarılı olmaz.
+- İşletme tahsilatları çevrim içi ödeme sağlayıcısı olmadan nakit veya banka havalesiyle yönetilir. Paket fiyatı yönetim panelinden belirlenir; yönetici onayı aboneliği etkinleştirir.
 - Bu depodaki SQL şeması ile migration dosyası aynıdır; ancak SQL'in canlı Supabase projesine gerçekten uygulandığı GitHub derlemesiyle kanıtlanamaz.
 
 ## Supabase kurulumu
@@ -33,5 +34,5 @@ Bu depoda bir `.ipa` dosyası veya iOS imzalı IPA üretme iş akışı bulunmuy
 
 - Supabase şemasının canlı projede uygulandığını ve RLS izinlerinin gerçek kullanıcılarla doğrulandığını test et.
 - Android ve iOS'ta aynı hesapla giriş yaparak değişikliklerin diğer cihazda görünmesini uçtan uca doğrula.
-- Gerçek satın alma doğrulaması olmadan sadakat damgası üretme.
+- Gerçek NTAG 424 DNA etiketi ve sunucu anahtarıyla sayaç/tekrar testleri tamamlanmadan NFC özelliğini üretimde kullanma.
 - iOS imzalama, gerçek cihaz testi ve mağaza gönderimi ayrıca tamamlanmalıdır.
