@@ -533,7 +533,7 @@ class _AuthPageState extends State<AuthPage> {
           user['nfcOrder'] = {
             'businessName': cafeName.text.trim(), 'tagCount': tagCount,
             'packagePriceTry': packagePrices[tagCount] ?? 0, 'shippingTry': shippingPrice,
-            'totalTry': orderTotal, 'paymentMethod': 'IBAN havale/EFT',
+            'totalTry': orderTotal, 'paymentMethod': 'Nakit / banka havalesi (yönetici onaylı)',
             'paymentStatus': 'Ödeme bekliyor', 'orderStatus': 'Başvuru inceleniyor',
             'recipientName': deliveryName.text.trim(), 'recipientPhone': deliveryPhone.text.trim(),
             'province': deliveryProvince.text.trim(), 'district': deliveryDistrict.text.trim(),
@@ -1139,7 +1139,7 @@ class AdminSettings extends StatelessWidget {
   @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(18),children:[
     const Heading('Yönetim ayarları','Yönetici erişimi ve hizmet yapılandırması.'),
     const Card(child:ListTile(leading:Icon(Icons.shield_outlined,color:forest),title:Text('Yönetici erişimi'),subtitle:Text('Yönetici girişi yalnızca onaylı yönetici rolüne sahip bulut hesabıyla yapılır.'))),
-    const Card(child:ListTile(leading:Icon(Icons.payments_outlined,color:brown),title:Text('IBAN / ödeme'),subtitle:Text('Gerçek IBAN tanımlanmadan ödeme bilgisi veya ödeme talebi yayımlanmaz.'))),
+    const Card(child:ListTile(leading:Icon(Icons.payments_outlined,color:brown),title:Text('Manuel tahsilat'),subtitle:Text('Şimdilik çevrim içi ödeme yok. İşletme ödemeleri nakit veya banka havalesiyle alınır; yönetici tahsilatı panelden onaylar.'))),
     const Card(child:ListTile(leading:Icon(Icons.storage_outlined,color:forest),title:Text('Veri saklama'),subtitle:Text('Oturum açan kullanıcıların bulut verileri Supabase erişim politikalarıyla korunur; yayından önce uçtan uca yetki testleri tamamlanmalıdır.'))),
     const LocalModeNote(),
   ]);
