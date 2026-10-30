@@ -45,11 +45,15 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
           p = Path("android/app/src/main/AndroidManifest.xml")
           s = p.read_text()
           if "android.permission.NFC" not in s:
               s = s.replace("<application", '    <uses-permission android:name="android.permission.NFC" />\n    <application', 1)
-              p.write_text(s)
+          if "android.hardware.nfc" not in s:
+              s = s.replace("<application", '    <uses-feature android:name="android.hardware.nfc" android:required="false" />\n    <application', 1)
+          s = re.sub(r'android:label="[^"]+"', 'android:label="Cafe Dünyam"', s, count=1)
+          p.write_text(s)
           PY
       - name: Paketleri indir
         working-directory: mobil
