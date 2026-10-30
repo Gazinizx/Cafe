@@ -84,7 +84,11 @@ Future<Map<String, dynamic>> cloudProfile(User authUser) async {
       user['city'] = cafe['city'] ?? user['province'];
     }
     final order = await cloud.from('business_orders').select().eq('business_id', authUser.id).order('created_at', ascending: false).limit(1).maybeSingle();
-    if (order != null) user['nfcOrder'] = Map<String,dynamic>.from(order['order_data'] as Map);
+    if (order != null) {
+      final orderData = Map<String,dynamic>.from(order['order_data'] as Map);
+      orderData['orderStatus'] = order['order_status'] == 'pending' ? 'İncelemede' : order['order_status'];
+      user['nfcOrder'] = orderData;
+    }
   } else if (role == 'customer') {
     final employeeRows = await cloud.from('business_employees')
       .select('business_id,branch_id,display_name')
@@ -463,9 +467,6 @@ class _AuthPageState extends State<AuthPage> {
   String role = 'customer';
   static const int tagCount = 1;
   bool busy = false, hide = true;
-  static const int packagePrice = 0;
-  static const int shippingPrice = 0;
-  int get orderTotal => packagePrice + shippingPrice;
 
   @override void initState() { super.initState(); role = widget.initialRole; }
   @override void dispose() {
@@ -523,10 +524,7 @@ class _AuthPageState extends State<AuthPage> {
               'delivery_province': deliveryProvince.text.trim(),
               'delivery_district': deliveryDistrict.text.trim(),
               'delivery_address': deliveryAddress.text.trim(),
-              'tag_count': '$tagCount',
-              'package_price_try': '$packagePrice',
-              'shipping_try': '$shippingPrice',
-              'order_total_try': '$orderTotal',
+              'tag_count': '1',
             },
           },
         );
@@ -545,7 +543,7 @@ class _AuthPageState extends State<AuthPage> {
             'businessAddress': address.text.trim(), 'deliveryName': deliveryName.text.trim(),
             'deliveryPhone': deliveryPhone.text.trim(), 'deliveryProvince': deliveryProvince.text.trim(),
             'deliveryDistrict': deliveryDistrict.text.trim(), 'deliveryAddress': deliveryAddress.text.trim(),
-            'tagCount': tagCount,
+            'tagCount': 1,
           },
         };
         if (cloud.auth.currentSession == null) {
@@ -560,10 +558,8 @@ class _AuthPageState extends State<AuthPage> {
         if (role == 'business') {
           user['cafeId'] = (await cloud.from('cafes').select('id').eq('owner_id', authUser.id).single())['id'];
           user['nfcOrder'] = {
-            'businessName': cafeName.text.trim(), 'tagCount': tagCount,
-            'packagePriceTry': packagePrice, 'shippingTry': shippingPrice,
-            'totalTry': orderTotal, 'paymentMethod': 'Nakit / banka havalesi (yönetici onaylı)',
-            'paymentStatus': 'Ödeme bekliyor', 'orderStatus': 'Başvuru inceleniyor',
+            'businessName': cafeName.text.trim(), 'tagCount': 1,
+            'orderStatus': 'İncelemede',
             'recipientName': deliveryName.text.trim(), 'recipientPhone': deliveryPhone.text.trim(),
             'province': deliveryProvince.text.trim(), 'district': deliveryDistrict.text.trim(),
             'address': deliveryAddress.text.trim(), 'createdAt': DateTime.now().toIso8601String(),
@@ -1241,6 +1237,11 @@ class BusinessDashboard extends StatelessWidget{
  const Text('Kasiyer etiketi müşteriye verir; müşteri okuttuktan sonra etiketi geri alır.'),
  const Text('Etiket kaydı ve etkinleştirme yönetici tarafından yapılır.',style:TextStyle(fontSize:12)),
 ]))),
+  if (user['nfcOrder'] is Map) Card(child: ListTile(
+    leading: const Icon(Icons.local_shipping_outlined, color: forest),
+    title: const Text('NFC etiketi teslimat durumu'),
+    subtitle: Text('${(user['nfcOrder'] as Map)['orderStatus'] ?? 'İncelemede'} • Teslim alacak: ${(user['nfcOrder'] as Map)['recipientName'] ?? user['name']}'),
+  )),
  const SizedBox(height:16),const Text('Yönetim araçları',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:forest)),
  const Card(child:ListTile(leading:Icon(Icons.campaign,color:forest),title:Text('Kampanya yönetimi'),subtitle:Text('Kampanya oluştur, düzenle ve yayından kaldır.'))),
  const Card(child:ListTile(leading:Icon(Icons.loyalty,color:forest),title:Text('Sadakat programı'),subtitle:Text('Her şube için damga hedefini ve ödülü belirle; bekleyen ödül taleplerini teslim edildi olarak işaretle.'))),
@@ -1676,7 +1677,7 @@ class _AdminShellState extends State<AdminShell> {
       NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: 'Başvurular'),
       NavigationDestination(icon: Icon(Icons.campaign_outlined), label: 'Kampanyalar'),
       NavigationDestination(icon: Icon(Icons.people_alt_outlined), label: 'Kullanıcılar'),
-      NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'Siparişler'),
+      NavigationDestination(icon: Icon(Icons.local_shipping_outlined), label: 'NFC teslimat'),
       NavigationDestination(icon: Icon(Icons.payments_outlined), label: 'Paket & ödeme'),
       NavigationDestination(icon: Icon(Icons.tune_rounded), label: 'Ayarlar'),
     ]),
@@ -1761,36 +1762,16 @@ class _AdminOrdersState extends State<AdminOrders> {
     if(!s.hasData)return const Center(child:CircularProgressIndicator());
     final orders=s.data!;
     return ListView(padding:const EdgeInsets.all(18),children:[
-      Heading('Sipariş ve NFC talepleri','Örnek fiyatlı sipariş kayıtları; ödeme alınmaz.'),
+      const Heading('NFC etiketi teslimatı','Her işletme için tek etiketin hazırlanma ve teslimat durumunu takip et.'),
       if(orders.isEmpty) const Card(child:Padding(padding:EdgeInsets.all(18),child:Text('Henüz sipariş talebi yok.'))),
       ...orders.map((o)=>Card(child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Text('${o['businessName'] ?? 'İşletme'}',style:const TextStyle(fontSize:18,fontWeight:FontWeight.w900)),
         Text('${o['businessEmail'] ?? ''} • İşletme başına tek NFC etiketi'),
         Text('Teslimat: ${o['recipientName'] ?? ''} • ${o['province'] ?? ''} / ${o['district'] ?? ''}'),
         Text('Adres: ${o['address'] ?? ''}'),
-        Text('Ödeme yöntemi: ${o['paymentMethod'] == 'bank_transfer' ? 'Banka havalesi' : 'Nakit'}'),
-        DropdownButtonFormField<String>(
-          value: ['cash', 'bank_transfer'].contains(o['paymentMethod']) ? o['paymentMethod'] : 'cash',
-          decoration: const InputDecoration(labelText: 'Tahsilat yöntemi'),
-          items: const [
-            DropdownMenuItem(value: 'cash', child: Text('Nakit')),
-            DropdownMenuItem(value: 'bank_transfer', child: Text('Banka havalesi')),
-          ],
-          onChanged: (v) { if (v != null) _updateOrder(o, 'paymentMethod', v); },
-        ),
-        DropdownButtonFormField<String>(
-          value: ['pending', 'confirmed', 'rejected'].contains(o['paymentStatus']) ? o['paymentStatus'] : 'pending',
-          decoration: const InputDecoration(labelText: 'Tahsilat durumu'),
-          items: const [
-            DropdownMenuItem(value: 'pending', child: Text('Ödeme bekliyor')),
-            DropdownMenuItem(value: 'confirmed', child: Text('Tahsilat doğrulandı')),
-            DropdownMenuItem(value: 'rejected', child: Text('Ödeme doğrulanmadı')),
-          ],
-          onChanged: (v) { if (v != null) _updateOrder(o, 'paymentStatus', v); },
-        ),
         Text('Sipariş durumu: ${o['orderStatus'] ?? 'İncelemede'}'),
         DropdownButtonFormField<String>(
-          value: ['İncelemede','Onaylandı — ödeme bekliyor','Hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].contains(o['orderStatus']) ? o['orderStatus'] : 'İncelemede',
+          value: ['İncelemede','Etiket hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].contains(o['orderStatus']) ? o['orderStatus'] : 'İncelemede',
           decoration: const InputDecoration(labelText: 'Sipariş durumu'),
           items: const ['İncelemede','Onaylandı — ödeme bekliyor','Hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
           onChanged: (v) { if (v != null) _updateOrder(o, 'orderStatus', v); },
@@ -2119,8 +2100,7 @@ class _AdminApplicationsState extends State<AdminApplications> {
     final orders = await LocalData.list(businessOrdersKey, []);
     final oi = orders.indexWhere((o) => o['businessEmail'] == target['email']);
     if (oi >= 0) {
-      orders[oi]['orderStatus'] = status == 'approved' ? 'Onaylandı — ödeme bekliyor' : status == 'rejected' ? 'Başvuru reddedildi' : 'İncelemede';
-      orders[oi]['paymentStatus'] = status == 'approved' ? 'pending' : 'rejected';
+      orders[oi]['orderStatus'] = status == 'approved' ? 'Etiket hazırlanıyor' : status == 'rejected' ? 'Başvuru reddedildi' : 'İncelemede';
       await LocalData.saveList(businessOrdersKey, orders);
     }
     if (mounted) setState(() {});
