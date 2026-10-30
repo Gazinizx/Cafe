@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: ["main"]
+  pull_request:
+    branches: ["main"]
 
 concurrency:
   group: cafe-android-apk-${{ github.ref }}
@@ -32,11 +34,14 @@ jobs:
       - name: Android platform dosyalarını oluştur
         working-directory: mobil
         run: flutter create --platforms=android --project-name cafe_dunyam .
+      - name: Simge dönüştürme aracını izole kur
+        run: |
+          python3 -m venv /tmp/cafe-icon-venv
+          /tmp/cafe-icon-venv/bin/pip install cairosvg
       - name: Logo dosyasını Android simgesine hazırla
         working-directory: mobil
         run: |
-          python3 -m pip install --user cairosvg
-          python3 - <<'PY'
+          /tmp/cafe-icon-venv/bin/python - <<'PY'
           import cairosvg
           cairosvg.svg2png(url="assets/cafe_icon.svg", write_to="assets/app_icon.png", output_width=512, output_height=512)
           PY
