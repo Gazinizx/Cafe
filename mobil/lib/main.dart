@@ -822,6 +822,23 @@ class _CustomerCardsState extends State<CustomerCards>{
    }
  }
 
+ Future<void> _claimReward(String cafeId) async {
+   try {
+     final response = await cloud.functions.invoke('claim-cafe-reward', body: {'cafeId': cafeId});
+     final data = response.data;
+     if (response.status == 200 && data is Map && data['success'] == true) {
+       final claimId = (data['claimId'] ?? '').toString();
+       final shortCode = claimId.length >= 8 ? claimId.substring(0, 8).toUpperCase() : claimId;
+       _message('Ödül talebin oluşturuldu. Kasiyere kodunu göster: $shortCode');
+       if (mounted) setState(() {});
+     } else {
+       _message(data is Map ? (data['error'] ?? 'Ödül talebi oluşturulamadı.').toString() : 'Ödül talebi oluşturulamadı.');
+     }
+   } catch (error) {
+     _message('Ödül talebi gönderilemedi: $error');
+   }
+ }
+
  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
  const Heading('Kartlarım','Her kafenin damga kartı ayrıdır.'),
  FilledButton.icon(
@@ -842,6 +859,7 @@ class _CustomerCardsState extends State<CustomerCards>{
  Text('${c['name']}',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:17)),const SizedBox(height:10),
  LinearProgressIndicator(value:goal > 0 ? (count/goal).clamp(0.0,1.0) : 0.0,minHeight:8),
  const SizedBox(height:8),Text(goal > 0 ? '$count / $goal damga • ${c['reward']}' : c['reward'].toString()),
+ if (goal > 0 && count >= goal) Padding(padding: const EdgeInsets.only(top: 10), child: FilledButton.icon(onPressed: () => _claimReward(c['id'].toString()), icon: const Icon(Icons.card_giftcard), label: const Text('Ödülü kullan'))),
  ])));
  }).toList());
  }),
