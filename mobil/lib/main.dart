@@ -1635,7 +1635,7 @@ class _EmployeeShellState extends State<EmployeeShell> {
 
   Future<void> _redeem(String claimId) async {
     try {
-      final response = await cloud.functions.invoke('redeem-cafe-reward', body: {'claimId': claimId});
+      final response = await cloud.functions.invoke('redeem-cafe-reward', body: {'claimId': claimId}, headers: const {'x-region': 'eu-west-3'});
       final data = response.data;
       if (response.status == 200 && data is Map && data['success'] == true) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ödül teslim edildi olarak işaretlendi.')));
