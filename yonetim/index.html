@@ -26,6 +26,7 @@ label{display:block;font-size:13px;font-weight:650;margin:12px 0 6px}input,selec
 <aside><nav id="nav">
 <button class="active" data-tab="overview">Genel bakış</button>
 <button data-tab="applications">İşletme başvuruları</button>
+<button data-tab="delivery">NFC teslimat</button>
 <button data-tab="packages">Abonelik paketleri</button>
 <button data-tab="payments">Nakit / havale</button>
 <button data-tab="nfc">NFC etiketleri</button>
@@ -38,6 +39,7 @@ label{display:block;font-size:13px;font-weight:650;margin:12px 0 6px}input,selec
 <div class="panel"><h2>Yönetim notu</h2><div class="notice">Nakit ve banka havalesi tahsilatları yönetici onayıyla aboneliğe çevrilir. NFC damgaları yalnızca sunucu tarafında NTAG 424 DNA doğrulamasıyla verilir.</div></div>
 </section>
 <section id="tab-applications" class="hidden"><div class="page-head"><div><h1>İşletme başvuruları</h1><p>Başvuruları incele ve işletmeleri etkinleştir.</p></div><button class="secondary" data-refresh>Yenile</button></div><div class="panel"><div id="applicationsTable" class="table-wrap"></div></div></section>
+<section id="tab-delivery" class="hidden"><div class="page-head"><div><h1>NFC etiketi teslimatı</h1><p>Her işletmeye bir adet etiket gönderilir; teslimat durumunu güncelle.</p></div><button class="secondary" data-refresh>Yenile</button></div><div class="panel"><div id="deliveryTable" class="table-wrap"></div></div></section>
 <section id="tab-packages" class="hidden"><div class="page-head"><div><h1>Abonelik paketleri</h1><p>Fiyatları, dönemleri ve kullanım limitlerini yönet.</p></div></div>
 <div class="panel"><h2>Yeni paket</h2><form id="packageForm"><div class="form-grid"><div><label>Paket adı</label><input id="pkgName" required></div><div><label>Fiyat (TL)</label><input id="pkgPrice" type="number" min="0" step="0.01" required></div><div><label>Dönem</label><select id="pkgPeriod"><option value="monthly">Aylık</option><option value="yearly">Yıllık</option></select></div><div><label>Şube limiti</label><input id="pkgBranches" type="number" min="1" value="1" required></div><div><label>Çalışan limiti</label><input id="pkgEmployees" type="number" min="1" value="1" required></div><div><label>Açıklama</label><input id="pkgDescription"></div></div><div class="form-actions"><button type="submit">Paketi ekle</button></div></form></div>
 <div class="panel"><h2>Mevcut paketler</h2><div id="packagesTable" class="table-wrap"></div></div></section>
@@ -92,6 +94,11 @@ async function setBusinessStatus(id,status){
  if(e3)throw e3;
  toast(status==="approved"?"İşletme onaylandı.":"Başvuru reddedildi.");await loadApplications();await loadOverview();
 }
+async function loadDelivery(){
+ const {data,error}=await db.from("business_orders").select("id,business_id,order_data,order_status,profiles(full_name,email)").order("created_at",{ascending:false});if(error)throw error;
+ const statuses=["İncelemede","Etiket hazırlanıyor","Kargoya verildi","Teslim edildi","Başvuru reddedildi"];
+ $("deliveryTable").innerHTML=data.length?'<table><thead><tr><th>İşletme</th><th>Etiket</th><th>Teslimat</th><th>Durum</th></tr></thead><tbody>'+data.map(o=>{const d=o.order_data||{};const status=o.order_status==="pending"?"İncelemede":o.order_status;return '<tr><td><b>'+esc(o.profiles?.full_name||d.businessName||"İşletme")+'</b><small>'+esc(o.profiles?.email)+'</small></td><td>1 adet NFC</td><td>'+esc(d.recipientName)+'<small>'+esc(d.province)+' / '+esc(d.district)+' • '+esc(d.address)+'</small></td><td><select data-action="delivery-status" data-id="'+esc(o.id)+'">'+statuses.map(s=>'<option value="'+esc(s)+'" '+(status===s?'selected':'')+'>'+esc(s)+'</option>').join("")+'</select></td></tr>'}).join("")+'</tbody></table>':'<div class="empty">NFC etiketi teslimat talebi bulunmuyor.</div>';
+}
 async function loadPackages(){
  const {data,error}=await db.from("subscription_packages").select("*").order("created_at",{ascending:false});if(error)throw error;packages=data;
  $("packagesTable").innerHTML=data.length?'<table><thead><tr><th>Paket</th><th>Fiyat</th><th>Limitler</th><th>Durum</th><th></th></tr></thead><tbody>'+data.map(p=>'<tr><td><b>'+esc(p.name)+'</b><small>'+esc(p.description)+'</small></td><td>'+money(p.price_try)+'<small>'+(p.billing_period==="yearly"?"Yıllık":"Aylık")+'</small></td><td>'+esc(p.branch_limit)+' şube • '+esc(p.employee_limit)+' çalışan</td><td>'+pill(p.is_active?"active":"rejected")+'</td><td><div class="actions"><button class="secondary" data-action="edit-package" data-id="'+esc(p.id)+'">Düzenle</button><button data-action="toggle-package" data-id="'+esc(p.id)+'" data-active="'+(!p.is_active)+'">'+(p.is_active?"Pasifleştir":"Etkinleştir")+'</button></div></td></tr>').join("")+'</tbody></table>':'<div class="empty">Henüz paket eklenmedi.</div>';
@@ -121,6 +128,7 @@ async function loadTab(tab){
  try{
   if(tab==="overview")await loadOverview();
   if(tab==="applications")await loadApplications();
+  if(tab==="delivery")await loadDelivery();
   if(tab==="packages")await loadPackages();
   if(tab==="payments")await loadPayments();
   if(tab==="nfc")await loadNfc();
@@ -153,6 +161,11 @@ $("nfcForm").addEventListener("submit",async e=>{
  const {data,error}=await db.functions.invoke("manage-nfc-tag",{body:{action:"register",businessId:$("nfcBusiness").value,branchId:$("nfcBranch").value,tagUid:$("nfcUid").value.trim(),secretReference:$("nfcSecret").value.trim()},headers:{"x-region":"eu-west-3"}});
  if(error){toast(error.message,true);return}if(!data?.success){toast(data?.error||"Etiket kaydedilemedi.",true);return}
  $("nfcUid").value="";$("nfcSecret").value="";toast(data.message||"Etiket bağlandı.");await loadNfc();
+});
+document.addEventListener("change",async e=>{
+ const control=e.target.closest('[data-action="delivery-status"]');if(!control)return;
+ try{const {error}=await db.from("business_orders").update({order_status:control.value}).eq("id",control.dataset.id);if(error)throw error;toast("NFC teslimat durumu güncellendi.");}
+ catch(error){toast(error.message||"Teslimat durumu güncellenemedi.",true)}
 });
 document.addEventListener("click",async e=>{
  const btn=e.target.closest("[data-action]");if(!btn)return;
