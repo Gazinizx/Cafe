@@ -808,6 +808,7 @@ class _CustomerCardsState extends State<CustomerCards>{
            final response = await cloud.functions.invoke(
              'verify-nfc-stamp',
              body: {'url': secureUri.toString()},
+             headers: const {'x-region': 'eu-west-3'},
            );
            final data = response.data;
            if (response.status != 200 || data is! Map) {
@@ -840,7 +841,7 @@ class _CustomerCardsState extends State<CustomerCards>{
 
  Future<void> _claimReward(String cafeId) async {
    try {
-     final response = await cloud.functions.invoke('claim-cafe-reward', body: {'cafeId': cafeId});
+     final response = await cloud.functions.invoke('claim-cafe-reward', body: {'cafeId': cafeId}, headers: const {'x-region': 'eu-west-3'});
      final data = response.data;
      if (response.status == 200 && data is Map && data['success'] == true) {
        final claimId = (data['claimId'] ?? '').toString();
@@ -1037,7 +1038,7 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
 
   Future<void> _redeem(String claimId) async {
     try {
-      final response = await cloud.functions.invoke('redeem-cafe-reward', body: {'claimId': claimId});
+      final response = await cloud.functions.invoke('redeem-cafe-reward', body: {'claimId': claimId}, headers: const {'x-region': 'eu-west-3'});
       final data = response.data;
       if (response.status == 200 && data is Map && data['success'] == true) {
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ödül teslim edildi olarak işaretlendi.')));
@@ -1487,7 +1488,7 @@ class _BusinessSettingsState extends State<BusinessSettings> {
     }
     setState(() => _savingEmployee = true);
     try {
-      final response = await cloud.functions.invoke('find-business-employee', body: {'email': email});
+      final response = await cloud.functions.invoke('find-business-employee', body: {'email': email}, headers: const {'x-region': 'eu-west-3'});
       final data = response.data;
       if (response.status != 200 || data is! Map || data['employeeId'] == null) {
         throw StateError(data is Map ? (data['error'] ?? 'Çalışan bulunamadı.').toString() : 'Çalışan bulunamadı.');
@@ -1864,7 +1865,7 @@ class _AdminBillingState extends State<AdminBilling> {
         'branchId': _selectedBranchId,
         'tagUid': _tagUid.text.trim(),
         'secretReference': _secretReference.text.trim(),
-      });
+      }, headers: const {'x-region': 'eu-west-3'});
       final data = response.data;
       if (response.status != 200 || data is! Map || data['success'] != true) {
         throw StateError(data is Map ? (data['error'] ?? 'NFC etiketi kaydedilemedi.').toString() : 'NFC etiketi kaydedilemedi.');
@@ -1879,7 +1880,7 @@ class _AdminBillingState extends State<AdminBilling> {
 
   Future<void> _revokeNfcTag(String id) async {
     try {
-      final response = await cloud.functions.invoke('manage-nfc-tag', body: {'action': 'revoke', 'tagId': id});
+      final response = await cloud.functions.invoke('manage-nfc-tag', body: {'action': 'revoke', 'tagId': id}, headers: const {'x-region': 'eu-west-3'});
       final data = response.data;
       if (response.status != 200 || data is! Map || data['success'] != true) throw StateError('NFC etiketi iptal edilemedi.');
       await _load();
