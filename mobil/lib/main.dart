@@ -1190,7 +1190,7 @@ class _AdminApplicationsState extends State<AdminApplications> {
           Text('${u['name']} • ${u['email']}'),
           Text('${u['phone'] ?? ''} • ${u['province'] ?? ''} / ${u['district'] ?? ''}'),
           Text('${u['businessAddress'] ?? ''}'),
-          Text('NFC tag: ${u['tagCount'] ?? 0} adet • Örnek toplam: ${(u['nfcOrder'] as Map?)?['totalTry'] ?? 0} TL'),
+          const Text('NFC etiketi: İşletme başına tek adet • Tahsilat: Nakit / banka havalesi'),
           const SizedBox(height: 10),
           Row(children: [
             Expanded(child: FilledButton(onPressed: () => _setStatus(u, 'approved'), child: const Text('Onayla'))),
