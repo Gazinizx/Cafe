@@ -1242,7 +1242,7 @@ class BusinessDashboard extends StatelessWidget{
 ]))),
  const SizedBox(height:16),const Text('Yönetim araçları',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:forest)),
  const Card(child:ListTile(leading:Icon(Icons.campaign,color:forest),title:Text('Kampanya yönetimi'),subtitle:Text('Kampanya oluştur, düzenle ve yayından kaldır.'))),
- const Card(child:ListTile(leading:Icon(Icons.loyalty,color:forest),title:Text('Sadakat programı'),subtitle:Text('Kart ve ödül yapısı sonraki doğrulama adımına hazır taslak olarak ele alınır.'))),
+ const Card(child:ListTile(leading:Icon(Icons.loyalty,color:forest),title:Text('Sadakat programı'),subtitle:Text('Her şube için damga hedefini ve ödülü belirle; bekleyen ödül taleplerini teslim edildi olarak işaretle.'))),
  if (user['approvalStatus'] == 'approved') const Card(child: Padding(padding: EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
     Text('Başvuru onaylandı', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: forest)),
     SizedBox(height: 8),
@@ -1381,7 +1381,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
       if (visible.isEmpty) return const Padding(padding: EdgeInsets.all(12), child: Text('Henüz sana ait kampanya yok.'));
       return Column(children: visible.map((d) => Card(child: ListTile(
         title: Text('${d['title']}'),
-        subtitle: Text('${d['benefit']}\\nDurum: ${d['active'] == true ? 'Aktif (yerel)' : 'Pasif'}'),
+        subtitle: Text('${d['benefit']}\\nDurum: ${d['active'] == true ? 'Aktif' : 'Pasif'}'),
         isThreeLine: true,
         trailing: PopupMenuButton<String>(onSelected: (v) { if (v == 'edit') _edit(d); else if (v == 'toggle') _toggle(d); else _delete('${d['id']}'); }, itemBuilder: (_) => const [
           PopupMenuItem(value: 'edit', child: Text('Düzenle')),
@@ -1766,7 +1766,7 @@ class _AdminOrdersState extends State<AdminOrders> {
         Text('${o['businessEmail'] ?? ''} • İşletme başına tek NFC etiketi'),
         Text('Teslimat: ${o['recipientName'] ?? ''} • ${o['province'] ?? ''} / ${o['district'] ?? ''}'),
         Text('Adres: ${o['address'] ?? ''}'),
-        Text('Ödeme yöntemi: ${o['paymentMethod'] ?? 'Belirtilmedi'}'),
+        Text('Ödeme yöntemi: ${o['paymentMethod'] == 'bank_transfer' ? 'Banka havalesi' : 'Nakit'}'),
         DropdownButtonFormField<String>(
           value: ['cash', 'bank_transfer'].contains(o['paymentMethod']) ? o['paymentMethod'] : 'cash',
           decoration: const InputDecoration(labelText: 'Tahsilat yöntemi'),
@@ -2026,7 +2026,7 @@ class _AdminApplicationsState extends State<AdminApplications> {
     final oi = orders.indexWhere((o) => o['businessEmail'] == target['email']);
     if (oi >= 0) {
       orders[oi]['orderStatus'] = status == 'approved' ? 'Onaylandı — ödeme bekliyor' : status == 'rejected' ? 'Başvuru reddedildi' : 'İncelemede';
-      orders[oi]['paymentStatus'] = status == 'approved' ? 'Ödeme bilgileri gösterilebilir' : 'Ödeme kapalı';
+      orders[oi]['paymentStatus'] = status == 'approved' ? 'pending' : 'rejected';
       await LocalData.saveList(businessOrdersKey, orders);
     }
     if (mounted) setState(() {});
