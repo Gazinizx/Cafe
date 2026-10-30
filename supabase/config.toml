@@ -14,3 +14,9 @@ enabled = true
 
 [functions.verify-nfc-stamp]
 verify_jwt = true
+
+[functions.claim-cafe-reward]
+verify_jwt = true
+
+[functions.redeem-cafe-reward]
+verify_jwt = true
