@@ -43,14 +43,17 @@ SupabaseClient get cloud {
 
 Future<Map<String, dynamic>> cloudProfile(User authUser) async {
   final row = await cloud.from('profiles').select().eq('id', authUser.id).maybeSingle();
-  final meta = authUser.userMetadata ?? <String, dynamic>{};
-  final role = (row?['role'] ?? meta['role'] ?? 'customer').toString();
+  if (row == null) {
+    throw StateError('Hesap profili bulunamadı. Yönetici desteği gerekli.');
+  }
+  // Authorization comes only from the server-managed profiles row, never user-editable metadata.
+  final role = (row['role'] ?? 'customer').toString();
   final user = <String, dynamic>{
     'id': authUser.id,
-    'name': (row?['full_name'] ?? meta['full_name'] ?? authUser.email ?? 'Kullanıcı').toString(),
-    'email': (row?['email'] ?? authUser.email ?? '').toString(),
+    'name': (row['full_name'] ?? authUser.email ?? 'Kullanıcı').toString(),
+    'email': (row['email'] ?? authUser.email ?? '').toString(),
     'role': role,
-    'approvalStatus': (row?['approval_status'] ?? (role == 'business' ? 'pending' : 'approved')).toString(),
+    'approvalStatus': (row['approval_status'] ?? 'pending').toString(),
     'cloudAccount': true,
   };
   if (role == 'business') {
