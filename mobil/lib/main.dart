@@ -1722,10 +1722,11 @@ class _AdminUsersState extends State<AdminUsers> {
     if (ok != true || u['role'] == 'admin') return;
     if (cloud.auth.currentSession != null && LocalData._uuid(u['id']?.toString())) {
       try {
-        await cloud.rpc('admin_delete_user', params: {'target_id': u['id']});
+        final response = await cloud.functions.invoke('admin-delete-user', body: {'userId': u['id']}, headers: const {'x-region': 'eu-west-3'});
+        if (response.status != 200 || response.data is! Map || response.data['success'] != true) throw StateError('Hesap silinemedi.');
         if (mounted) setState(() {});
-      } on PostgrestException catch (e) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hesap silinemedi: ${e.message}')));
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hesap silinemedi: $e')));
       }
       return;
     }
