@@ -17,16 +17,22 @@ begin
     v_qual := p.qual;
     v_check := p.with_check;
     if v_qual is not null then
+      v_qual := replace(v_qual, 'SELECT auth.uid() AS uid', '__AUTH_UID_SELECT_ALIAS__');
+      v_qual := replace(v_qual, 'select auth.uid() as uid', '__AUTH_UID_SELECT_ALIAS__');
       v_qual := replace(v_qual, 'SELECT auth.uid()', '__AUTH_UID_SELECT__');
       v_qual := replace(v_qual, 'select auth.uid()', '__AUTH_UID_SELECT__');
       v_qual := replace(v_qual, 'auth.uid()', '(select auth.uid())');
-      v_qual := replace(v_qual, '__AUTH_UID_SELECT__', 'auth.uid()');
+      v_qual := replace(v_qual, '__AUTH_UID_SELECT_ALIAS__', 'SELECT auth.uid() AS uid');
+      v_qual := replace(v_qual, '__AUTH_UID_SELECT__', 'SELECT auth.uid()');
     end if;
     if v_check is not null then
+      v_check := replace(v_check, 'SELECT auth.uid() AS uid', '__AUTH_UID_SELECT_ALIAS__');
+      v_check := replace(v_check, 'select auth.uid() as uid', '__AUTH_UID_SELECT_ALIAS__');
       v_check := replace(v_check, 'SELECT auth.uid()', '__AUTH_UID_SELECT__');
       v_check := replace(v_check, 'select auth.uid()', '__AUTH_UID_SELECT__');
       v_check := replace(v_check, 'auth.uid()', '(select auth.uid())');
-      v_check := replace(v_check, '__AUTH_UID_SELECT__', 'auth.uid()');
+      v_check := replace(v_check, '__AUTH_UID_SELECT_ALIAS__', 'SELECT auth.uid() AS uid');
+      v_check := replace(v_check, '__AUTH_UID_SELECT__', 'SELECT auth.uid()');
     end if;
     if v_qual is not distinct from p.qual and v_check is not distinct from p.with_check then
       continue;
