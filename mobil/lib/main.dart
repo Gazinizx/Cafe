@@ -640,7 +640,7 @@ class _AuthPageState extends State<AuthPage> {
           const SizedBox(height: 10),
           const Text('Başvuru ve sipariş bilgilerin kayıt sırasında hesabına bağlı bulut sistemine gönderilir. Onaylanana kadar işletme özellikleri kısıtlıdır.'),
         ] else ...[
-          TextFormField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Telefon numarası', prefixIcon: Icon(Icons.phone_outlined)), validator: (v) { final digits = (v ?? '').replaceAll(RegExp(r'\\D'), ''); return digits.length < 10 || digits.length > 15 ? 'Geçerli telefon numarası yaz.' : null; }),
+          TextFormField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Telefon numarası', prefixIcon: Icon(Icons.phone_outlined)), validator: (v) { final digits = (v ?? '').replaceAll(RegExp(r'\D'), ''); return digits.length < 10 || digits.length > 15 ? 'Geçerli telefon numarası yaz.' : null; }),
           const SizedBox(height: 12),
         ],
       ] else ...[
