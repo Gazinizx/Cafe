@@ -87,9 +87,17 @@ jobs:
               p.write_text(updated)
               print(f'compileSdk 35 ayarlandı: {p}')
           PY
-      - name: Android uygulama simgesini üret
+      - name: Android derlemesinde yalnız Android simgesini üret
         working-directory: mobil
-        run: dart run flutter_launcher_icons
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('pubspec.yaml')
+          s = p.read_text()
+          s = s.replace('  ios: true\n', '  ios: false\n')
+          p.write_text(s)
+          PY
+          dart run flutter_launcher_icons
       - name: APK derle
         working-directory: mobil
         run: flutter build apk --release
