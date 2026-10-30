@@ -15,7 +15,7 @@ Flutter tabanlı Android ve iOS uygulaması.
 - `SharedPreferences` cihaz içi tercih ve oturum saklama gibi yerel amaçlar içindir. Oturum açmış bir bulut hesabının bulut kaydı yapılamazsa veri artık sessizce cihaz belleğine yazılmaz; hata gösterilir.
 - Oturum açılmadan gösterilen örnek kafe/kampanya verileri cihazlar arasında eşitlenmez.
 - Müşteri damga bakiyesi `cafe_memberships` tablosundan okunur. Mobil istemcinin doğrudan damga yazmasına izin verilmez; NTAG 424 DNA doğrulama Edge Function'ı dağıtıldı; sunucu anahtarı ve fiziksel etiket yapılandırılmadan NFC damga işlemi başarılı olmaz.
-- İşletme tahsilatları şu aşamada çevrim içi ödeme sağlayıcısı olmadan nakit veya banka havalesiyle yönetilir. Ödeme durumunu yalnızca yönetici doğrular.
+- İşletme tahsilatları çevrim içi ödeme sağlayıcısı olmadan nakit veya banka havalesiyle yönetilir. Paket fiyatı yönetim panelinden belirlenir; yönetici onayı aboneliği etkinleştirir.
 - Bu depodaki SQL şeması ile migration dosyası aynıdır; ancak SQL'in canlı Supabase projesine gerçekten uygulandığı GitHub derlemesiyle kanıtlanamaz.
 
 ## Supabase kurulumu
