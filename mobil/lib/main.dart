@@ -105,10 +105,10 @@ Future<Map<String, dynamic>> cloudProfile(User authUser) async {
   return user;
 }
 
-const forest = Color(0xFF211711);
-const cream = Color(0xFFF7F0E5);
-const brown = Color(0xFFB76532);
-const gold = Color(0xFFE4B56B);
+const forest = Color(0xFF202A34);
+const cream = Color(0xFFF6F7F9);
+const brown = Color(0xFFC46A45);
+const gold = Color(0xFFD6A77A);
 const usersKey = 'cd_local_users_v1';
 const sessionKey = 'cd_local_session_v1';
 const cafesKey = 'cd_local_cafes_v1';
@@ -166,9 +166,9 @@ class CafeDunyamApp extends StatelessWidget {
     debugShowCheckedModeBanner: false,
     theme: ThemeData(
       useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(seedColor: brown, surface: cream),
+      colorScheme: ColorScheme.fromSeed(seedColor: brown, surface: cream, brightness: Brightness.light),
       scaffoldBackgroundColor: cream,
-      appBarTheme: const AppBarTheme(backgroundColor: cream, foregroundColor: forest, centerTitle: false),
+      appBarTheme: const AppBarTheme(backgroundColor: cream, foregroundColor: forest, centerTitle: false, elevation: 0),
       cardTheme: CardThemeData(color: Colors.white, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18))),
       inputDecorationTheme: InputDecorationTheme(filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: Color(0xFFE8DCCB))), focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: brown, width: 1.5))),
     ),
@@ -508,6 +508,7 @@ class _AuthPageState extends State<AuthPage> {
           password: password.text,
           data: {
             'full_name': name.text.trim(),
+            'phone': phone.text.trim(),
             'role': role,
             if (role == 'business') ...{
               'cafe_name': cafeName.text.trim(),
@@ -581,7 +582,9 @@ class _AuthPageState extends State<AuthPage> {
         SnackBar(content: Text('Bulut veritabanı hatası: ${e.message}. Supabase şema kurulumunu kontrol et.')),
       );
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('İşlem tamamlanamadı: $e')));
+      final networkError = e.toString().contains('SocketException') || e.toString().contains('Failed host lookup');
+      final message = networkError ? 'Sunucuya bağlanılamıyor. İnternet bağlantını kontrol edip tekrar dene.' : 'İşlem tamamlanamadı. Bilgilerini kontrol edip tekrar dene.';
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
     } finally {
       if (mounted) setState(() => busy = false);
     }
@@ -594,7 +597,7 @@ class _AuthPageState extends State<AuthPage> {
       const SizedBox(height: 8), const LocalModeNote(),
       if (widget.register) ...[
         sectionTitle('Hesap bilgileri'),
-        TextFormField(controller: name, decoration: const InputDecoration(labelText: 'Yetkili kişinin adı soyadı'), validator: (v) => requiredText(v, 'Ad soyad')),
+        TextFormField(controller: name, decoration: InputDecoration(labelText: role == 'business' ? 'Yetkili kişinin adı soyadı' : 'Ad Soyad'), validator: (v) => requiredText(v, 'Ad soyad')),
         const SizedBox(height: 12),
         TextFormField(controller: email, keyboardType: widget.register ? TextInputType.emailAddress : TextInputType.text, decoration: InputDecoration(labelText: widget.register ? 'E-posta' : 'Kullanıcı adı veya e-posta', prefixIcon: const Icon(Icons.email_outlined)), validator: (v) => widget.register ? (v == null || !v.contains('@') ? 'Geçerli e-posta yaz.' : null) : (v == null || v.trim().isEmpty ? 'Kullanıcı adı veya e-posta yaz.' : null)),
         const SizedBox(height: 12),
@@ -637,7 +640,8 @@ class _AuthPageState extends State<AuthPage> {
           const SizedBox(height: 10),
           const Text('Başvuru ve sipariş bilgilerin kayıt sırasında hesabına bağlı bulut sistemine gönderilir. Onaylanana kadar işletme özellikleri kısıtlıdır.'),
         ] else ...[
-          sectionTitle('Müşteri bilgileri'),
+          TextFormField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Telefon numarası', prefixIcon: Icon(Icons.phone_outlined)), validator: (v) { final digits = (v ?? '').replaceAll(RegExp(r'\\D'), ''); return digits.length < 10 || digits.length > 15 ? 'Geçerli telefon numarası yaz.' : null; }),
+          const SizedBox(height: 12),
         ],
       ] else ...[
         TextFormField(controller: email, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'E-posta', prefixIcon: Icon(Icons.email_outlined)), validator: (v) => v == null || !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(v.trim()) ? 'Geçerli e-posta adresini yaz.' : null),
@@ -653,7 +657,7 @@ class _AuthPageState extends State<AuthPage> {
 
 class LocalModeNote extends StatelessWidget {
   const LocalModeNote({super.key});
-  @override Widget build(BuildContext context) => Container(padding:const EdgeInsets.all(13), decoration:BoxDecoration(color:const Color(0xFFE8DCC7), borderRadius:BorderRadius.circular(13)), child:const Text('Hesap işlemleri bulut kimlik doğrulamasını kullanır. İşletme başvuruları yönetici onayına tabidir. Ödeme bilgileri yalnızca doğrulanmış resmî kanallardan paylaşılmalıdır.', style:TextStyle(fontSize:13)));
+  @override Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
 class CustomerShell extends StatefulWidget {
