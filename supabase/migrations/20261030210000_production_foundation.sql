@@ -197,7 +197,7 @@ create policy "cafes_owner_insert" on public.cafes for insert to authenticated w
 -- Preserve the existing signup workflow while setting business_id for the initial branch.
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = ''
-as $
+as $signup$
 declare requested_role text;
 begin
   requested_role := coalesce(new.raw_user_meta_data ->> 'role', 'customer');
@@ -252,7 +252,7 @@ begin
   end if;
   return new;
 end;
-$;
+$signup$;
 
 -- Called only by a trusted Edge Function after the NTAG cryptographic proof is verified.
 -- The mobile app must never receive the tag's AES key or direct permission to execute this RPC.
