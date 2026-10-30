@@ -932,11 +932,13 @@ class _BusinessShellState extends State<BusinessShell>{
  BusinessDashboard(user:widget.user),
  BusinessDeals(user:widget.user),
  BusinessRewardSettings(user:widget.user),
+ BusinessBilling(user:widget.user),
  BusinessSettings(user:widget.user),
  ])),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const[
  NavigationDestination(icon:Icon(Icons.dashboard_outlined),label:'Panel'),
  NavigationDestination(icon:Icon(Icons.campaign_outlined),label:'Kampanyalar'),
  NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),label:'Ödül'),
+ NavigationDestination(icon:Icon(Icons.payments_outlined),label:'Paket'),
  NavigationDestination(icon:Icon(Icons.storefront_outlined),label:'İşletmem'),
  ]));
 }
@@ -1069,6 +1071,128 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
     ]);
   }
 }
+class BusinessBilling extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const BusinessBilling({required this.user, super.key});
+  @override State<BusinessBilling> createState() => _BusinessBillingState();
+}
+class _BusinessBillingState extends State<BusinessBilling> {
+  List<Map<String,dynamic>> _packages = [];
+  List<Map<String,dynamic>> _payments = [];
+  List<Map<String,dynamic>> _subscriptions = [];
+  String? _selectedPackage;
+  String _method = 'cash';
+  bool _loading = true, _requesting = false;
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    try {
+      final packageRows = await cloud.from('subscription_packages').select().eq('is_active', true).order('price_try');
+      final paymentRows = await cloud.from('manual_payments').select('*, subscription_packages(name,billing_period)')
+        .eq('business_id', widget.user['id']).order('created_at', ascending: false);
+      final subscriptionRows = await cloud.from('business_subscriptions').select('*, subscription_packages(name,billing_period)')
+        .eq('business_id', widget.user['id']).order('created_at', ascending: false);
+      _packages = (packageRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _payments = (paymentRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _subscriptions = (subscriptionRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      if (_selectedPackage == null || !_packages.any((p) => p['id'].toString() == _selectedPackage)) {
+        _selectedPackage = _packages.isEmpty ? null : _packages.first['id'].toString();
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket bilgileri yüklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _period(Map<String,dynamic> row) => row['billing_period'] == 'yearly' ? 'yıllık' : 'aylık';
+  String _paymentStatus(String? status) => switch (status) {
+    'confirmed' => 'Tahsilat onaylandı',
+    'rejected' => 'Reddedildi',
+    _ => 'Onay bekliyor',
+  };
+
+  Future<void> _requestPayment() async {
+    final packageRows = _packages.where((p) => p['id'].toString() == _selectedPackage).toList();
+    if (packageRows.isEmpty) return;
+    final package = packageRows.first;
+    setState(() => _requesting = true);
+    try {
+      await cloud.from('manual_payments').insert({
+        'business_id': widget.user['id'],
+        'package_id': package['id'],
+        'amount_try': (package['price_try'] as num).toDouble(),
+        'payment_method': _method,
+        'status': 'pending',
+      });
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tahsilat talebin yöneticiye iletildi. Ödeme onaylanınca paket etkinleşir.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tahsilat talebi oluşturulamadı: $error')));
+    } finally {
+      if (mounted) setState(() => _requesting = false);
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return ListView(padding: const EdgeInsets.all(20), children: [
+      const Heading('Paket ve ödeme', 'Paket seç; ödemeyi nakit veya banka havalesiyle yap.'),
+      if (_packages.isEmpty) const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('Henüz satışa açık paket bulunmuyor. Cafe Dünyam yöneticisi paket eklediğinde burada görünecek.'))),
+      if (_packages.isNotEmpty) ...[
+        DropdownButtonFormField<String>(
+          value: _selectedPackage,
+          decoration: const InputDecoration(labelText: 'Abonelik paketi'),
+          items: _packages.map((p) => DropdownMenuItem(
+            value: p['id'].toString(),
+            child: Text('${p['name']} • ${(p['price_try'] as num).toStringAsFixed(2)} TL / ${_period(p)}'),
+          )).toList(),
+          onChanged: (value) => setState(() => _selectedPackage = value),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: _method,
+          decoration: const InputDecoration(labelText: 'Ödeme yöntemi'),
+          items: const [
+            DropdownMenuItem(value: 'cash', child: Text('Nakit')),
+            DropdownMenuItem(value: 'bank_transfer', child: Text('Banka havalesi')),
+          ],
+          onChanged: (value) => setState(() => _method = value ?? 'cash'),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _requesting ? null : _requestPayment,
+          icon: const Icon(Icons.receipt_long),
+          label: Text(_requesting ? 'Gönderiliyor…' : 'Tahsilat talebi oluştur'),
+        ),
+      ],
+      const SizedBox(height: 24),
+      const Text('Aboneliklerim', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      if (_subscriptions.isEmpty) const Text('Henüz etkin aboneliğin yok.'),
+      ..._subscriptions.map((s) {
+        final package = s['subscription_packages'] is Map ? Map<String,dynamic>.from(s['subscription_packages'] as Map) : <String,dynamic>{};
+        return Card(child: ListTile(
+          title: Text((package['name'] ?? 'Abonelik').toString()),
+          subtitle: Text('Durum: ${s['status']} • Bitiş: ${s['ends_at'] ?? 'Belirtilmedi'}'),
+        ));
+      }),
+      const SizedBox(height: 20),
+      const Text('Tahsilat geçmişi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      if (_payments.isEmpty) const Text('Henüz tahsilat talebin yok.'),
+      ..._payments.map((p) {
+        final package = p['subscription_packages'] is Map ? Map<String,dynamic>.from(p['subscription_packages'] as Map) : <String,dynamic>{};
+        return Card(child: ListTile(
+          leading: const Icon(Icons.payments_outlined, color: forest),
+          title: Text('${package['name'] ?? 'Paket'} • ${(p['amount_try'] as num).toStringAsFixed(2)} TL'),
+          subtitle: Text('${p['payment_method'] == 'cash' ? 'Nakit' : 'Banka havalesi'} • ${_paymentStatus(p['status']?.toString())}'),
+        ));
+      }),
+      const Padding(padding: EdgeInsets.only(top: 12), child: Text('Çevrim içi kart tahsilatı şu aşamada kapalıdır. Paket, yönetici nakit veya havale tahsilatını onayladıktan sonra etkinleşir.')),
+    ]);
+  }
+}
+
 class BusinessDashboard extends StatelessWidget{
  final Map<String,dynamic> user;const BusinessDashboard({required this.user,super.key});
  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
