@@ -31,11 +31,14 @@ jobs:
       - name: Generate Android platform files
         working-directory: mobil
         run: flutter create --platforms=android --project-name cafe_dunyam .
+      - name: Install isolated icon tooling
+        run: |
+          python3 -m venv /tmp/cafe-icon-venv
+          /tmp/cafe-icon-venv/bin/pip install cairosvg
       - name: Generate launcher icon
         working-directory: mobil
         run: |
-          python3 -m pip install --user cairosvg
-          python3 - <<'PY'
+          /tmp/cafe-icon-venv/bin/python - <<'PY'
           import cairosvg
           cairosvg.svg2png(url="assets/cafe_icon.svg", write_to="assets/app_icon.png", output_width=512, output_height=512)
           PY
@@ -124,11 +127,15 @@ jobs:
           project = project.replace("IPHONEOS_DEPLOYMENT_TARGET = 12.0;", "IPHONEOS_DEPLOYMENT_TARGET = 13.0;")
           project_path.write_text(project)
           PY
+      - name: Install Cairo and isolated icon tooling
+        run: |
+          brew install cairo
+          python3 -m venv /tmp/cafe-icon-venv
+          /tmp/cafe-icon-venv/bin/pip install cairosvg
       - name: Generate launcher icon source
         working-directory: mobil
         run: |
-          python3 -m pip install --user cairosvg
-          python3 - <<'PY'
+          /tmp/cafe-icon-venv/bin/python - <<'PY'
           import cairosvg
           cairosvg.svg2png(url="assets/cafe_icon.svg", write_to="assets/app_icon.png", output_width=512, output_height=512)
           PY
