@@ -56,8 +56,8 @@ jobs:
           p.write_text(s)
           for gradle in Path("android/app").glob("build.gradle*"):
               g = gradle.read_text()
-              g = re.sub(r'(?m)^\\s*applicationId\\s*(?:=\\s*)?"[^"]+"', 'applicationId = "com.cafedunyam.app"', g)
-              g = re.sub(r'(?m)^\\s*namespace\\s*(?:=\\s*)?"[^"]+"', 'namespace = "com.cafedunyam.app"', g)
+              g = re.sub(r'(?m)^\s*applicationId\s*(?:=\s*)?"[^"]+"', 'applicationId = "com.cafedunyam.app"', g)
+              g = re.sub(r'(?m)^\s*namespace\s*(?:=\s*)?"[^"]+"', 'namespace = "com.cafedunyam.app"', g)
               if "com.cafedunyam.app" not in g:
                   raise SystemExit(f"Android package id could not be set: {gradle}")
               gradle.write_text(g)
