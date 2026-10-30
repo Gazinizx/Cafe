@@ -129,6 +129,27 @@ $function$;
 revoke all on function public.is_business_member(uuid) from public;
 grant execute on function public.is_business_member(uuid) to anon, authenticated;
 
+-- Employee access is branch-scoped. A NULL branch_id explicitly means all branches.
+create or replace function public.can_access_cafe(target_cafe_id uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $access$
+  select public.is_cafe_admin()
+    or exists (
+      select 1 from public.cafes c
+      join public.profiles p on p.id = c.business_id
+      where c.id = target_cafe_id and p.id = auth.uid()
+        and p.role = 'business' and p.approval_status = 'approved'
+    )
+    or exists (
+      select 1 from public.business_employees e
+      join public.cafes c on c.business_id = e.business_id
+      where c.id = target_cafe_id and e.employee_id = auth.uid()
+        and e.is_active and (e.branch_id is null or e.branch_id = target_cafe_id)
+    );
+$access$;
+revoke all on function public.can_access_cafe(uuid) from public;
+grant execute on function public.can_access_cafe(uuid) to anon, authenticated;
+
 drop policy if exists "memberships_read_business" on public.cafe_memberships;
 create policy "memberships_read_business" on public.cafe_memberships for select to authenticated
 using (public.can_access_cafe(cafe_id));
