@@ -6,7 +6,7 @@ Flutter tabanlı Android ve iOS uygulaması.
 - `yonetim/index.html`: tarayıcı içinde çalışan yerel örnek yönetim paneli.
 - `.github/workflows/android-apk.yml`: Android release APK derlemesi ve artifact çıktısı.
 - `.github/workflows/cross-platform.yml`: Android analiz/testleri ve iOS simülatör analiz/test/derlemesi.
-- `supabase/schema.sql` ve `supabase/migrations/20261014000000_initial_schema.sql`: Supabase tabloları ve RLS politikaları.
+- `supabase/schema.sql` ve `supabase/migrations/`: Supabase tabloları ve RLS politikaları. Üretim temeli migration'ı şube/çalışan, NFC kayıt defteri, ödül, paket/abonelik ve manuel tahsilat tablolarını ekler.
 - `SUPABASE_SETUP.md`: bulut kurulumu ve güvenlik notları.
 
 ## Veri ve platform senkronizasyonu
@@ -14,7 +14,8 @@ Flutter tabanlı Android ve iOS uygulaması.
 - Kayıt/giriş Supabase Auth üzerinden yapılır. Android ve iOS cihazlarında **aynı Supabase projesi ve aynı kullanıcı hesabı** kullanıldığında, uygulamanın buluta bağladığı profil, kafe, kampanya, kayıtlı kampanya ve işletme başvurusu/sipariş verileri ortak veritabanından okunur.
 - `SharedPreferences` cihaz içi tercih ve oturum saklama gibi yerel amaçlar içindir. Oturum açmış bir bulut hesabının bulut kaydı yapılamazsa veri artık sessizce cihaz belleğine yazılmaz; hata gösterilir.
 - Oturum açılmadan gösterilen örnek kafe/kampanya verileri cihazlar arasında eşitlenmez.
-- Müşteri damga bakiyesi `cafe_memberships` tablosundan okunur. Mobil istemcinin doğrudan damga yazmasına izin verilmez; doğrulanmış satıştan sonra damga veren güvenli sunucu uç noktası ayrıca kurulmalı ve test edilmelidir.
+- Müşteri damga bakiyesi `cafe_memberships` tablosundan okunur. Mobil istemcinin doğrudan damga yazmasına izin verilmez; NTAG doğrulamasını yapan güvenli Edge Function kurulup gerçek etiketle test edilmeden damga verme açılmaz.
+- İşletme tahsilatları şu aşamada çevrim içi ödeme sağlayıcısı olmadan nakit veya banka havalesiyle yönetilir. Ödeme durumunu yalnızca yönetici doğrular.
 - Bu depodaki SQL şeması ile migration dosyası aynıdır; ancak SQL'in canlı Supabase projesine gerçekten uygulandığı GitHub derlemesiyle kanıtlanamaz.
 
 ## Supabase kurulumu
