@@ -432,11 +432,11 @@ class _AuthPageState extends State<AuthPage> {
   final deliveryName = TextEditingController(), deliveryPhone = TextEditingController();
   final deliveryProvince = TextEditingController(), deliveryDistrict = TextEditingController(), deliveryAddress = TextEditingController();
   String role = 'customer';
-  int tagCount = 10;
+  static const int tagCount = 1;
   bool busy = false, hide = true;
-  static const Map<int,int> packagePrices = {10: 499, 25: 999, 50: 1799, 100: 2999};
-  static const int shippingPrice = 99;
-  int get orderTotal => (packagePrices[tagCount] ?? 499) + shippingPrice;
+  static const int packagePrice = 0;
+  static const int shippingPrice = 0;
+  int get orderTotal => packagePrice + shippingPrice;
 
   @override void initState() { super.initState(); role = widget.initialRole; }
   @override void dispose() {
@@ -495,7 +495,7 @@ class _AuthPageState extends State<AuthPage> {
               'delivery_district': deliveryDistrict.text.trim(),
               'delivery_address': deliveryAddress.text.trim(),
               'tag_count': '$tagCount',
-              'package_price_try': '${packagePrices[tagCount] ?? 0}',
+              'package_price_try': '$packagePrice',
               'shipping_try': '$shippingPrice',
               'order_total_try': '$orderTotal',
             },
@@ -532,7 +532,7 @@ class _AuthPageState extends State<AuthPage> {
           user['cafeId'] = (await cloud.from('cafes').select('id').eq('owner_id', authUser.id).single())['id'];
           user['nfcOrder'] = {
             'businessName': cafeName.text.trim(), 'tagCount': tagCount,
-            'packagePriceTry': packagePrices[tagCount] ?? 0, 'shippingTry': shippingPrice,
+            'packagePriceTry': packagePrice, 'shippingTry': shippingPrice,
             'totalTry': orderTotal, 'paymentMethod': 'Nakit / banka havalesi (yönetici onaylı)',
             'paymentStatus': 'Ödeme bekliyor', 'orderStatus': 'Başvuru inceleniyor',
             'recipientName': deliveryName.text.trim(), 'recipientPhone': deliveryPhone.text.trim(),
@@ -592,25 +592,11 @@ class _AuthPageState extends State<AuthPage> {
           TextFormField(controller: district, decoration: const InputDecoration(labelText: 'İlçe'), validator: (v) => requiredText(v, 'İlçe')),
           const SizedBox(height: 12),
           TextFormField(controller: address, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'İşletmenin açık adresi'), validator: (v) => requiredText(v, 'İşletme adresi')),
-          sectionTitle('NFC tag siparişi'),
-          const Text('Bunlar test fiyatlarıdır, gerçek satış fiyatı değildir. Kargo bedeli de örnektir.'),
-          const SizedBox(height: 10),
-          DropdownButtonFormField<int>(
-            value: tagCount, decoration: const InputDecoration(labelText: 'Kaç adet NFC tag istiyorsun?'),
-            items: const [
-              DropdownMenuItem(value: 10, child: Text('10 adet — 499 TL')),
-              DropdownMenuItem(value: 25, child: Text('25 adet — 999 TL')),
-              DropdownMenuItem(value: 50, child: Text('50 adet — 1.799 TL')),
-              DropdownMenuItem(value: 100, child: Text('100 adet — 2.999 TL')),
-            ],
-            onChanged: (v) => setState(() => tagCount = v ?? 10),
-          ),
-          const SizedBox(height: 8),
-          Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text('Paket: ' + packagePrices[tagCount].toString() + ' TL'),
-            Text('Örnek kargo: ' + shippingPrice.toString() + ' TL'),
-            const Divider(),
-            Text('Örnek toplam: ' + orderTotal.toString() + ' TL', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: forest)),
+          sectionTitle('NFC etiketi'),
+          const Card(child: Padding(padding: EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('Her işletmeye tek NFC etiketi tanımlanır.', style: TextStyle(fontWeight: FontWeight.w800, color: forest)),
+            SizedBox(height: 6),
+            Text('Kasiyer etiketi müşteriye verir. Müşteri telefonuyla okutur ve etiketi kasiyere geri verir. Aynı müşteri aynı şubede 10 dakika içinde yeniden damga alamaz.'),
           ]))),
           sectionTitle('Teslimat bilgileri'),
           TextFormField(controller: deliveryName, decoration: const InputDecoration(labelText: 'Teslim alacak kişinin adı soyadı'), validator: (v) => requiredText(v, 'Teslim alacak kişi')),
@@ -636,7 +622,7 @@ class _AuthPageState extends State<AuthPage> {
         Align(alignment: Alignment.centerRight, child: TextButton(onPressed: busy ? null : _resetPassword, child: const Text('Parolamı unuttum'))),
       ],
       const SizedBox(height: 22),
-      FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'İşleniyor…' : widget.register ? (role == 'business' ? 'İşletme kaydını ve sipariş taslağını oluştur' : 'Müşteri hesabını oluştur') : 'Giriş yap')),
+      FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'İşleniyor…' : widget.register ? (role == 'business' ? 'İşletme kaydını oluştur' : 'Müşteri hesabını oluştur') : 'Giriş yap')),
     ])),
   );
 }
@@ -836,11 +822,10 @@ class BusinessDashboard extends StatelessWidget{
  Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
  const Text('NFC tag sipariş özeti',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:forest)),
  const SizedBox(height:8),
- Text('Talep: ${user['tagCount'] ?? 0} adet NFC tag'),
- Text('Paket: ${(user['nfcOrder'] as Map?)?['packagePriceTry'] ?? 0} TL • Kargo: ${(user['nfcOrder'] as Map?)?['shippingTry'] ?? 0} TL'),
- Text('Örnek toplam: ${(user['nfcOrder'] as Map?)?['totalTry'] ?? 0} TL'),
- const SizedBox(height:6), const Text('Durum: Yerel taslak / ödeme bekleniyor',style:TextStyle(fontWeight:FontWeight.bold)),
- const Text('Bu sipariş bize gönderilmedi; IBAN ve fiyatlar demo amaçlıdır.',style:TextStyle(fontSize:12)),
+ const Text('İşletme başına tek NFC etiketi tanımlanır.'),
+ const SizedBox(height:6),
+ const Text('Kasiyer etiketi müşteriye verir; müşteri okuttuktan sonra etiketi geri alır.'),
+ const Text('Etiket kaydı ve etkinleştirme yönetici tarafından yapılır.',style:TextStyle(fontSize:12)),
 ]))),
  const SizedBox(height:16),const Text('Yönetim araçları',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:forest)),
  const Card(child:ListTile(leading:Icon(Icons.campaign,color:forest),title:Text('Kampanya yönetimi'),subtitle:Text('Kampanya oluştur, düzenle ve yayından kaldır.'))),
@@ -1124,8 +1109,7 @@ class _AdminOrdersState extends State<AdminOrders> {
       if(orders.isEmpty) const Card(child:Padding(padding:EdgeInsets.all(18),child:Text('Henüz sipariş talebi yok.'))),
       ...orders.map((o)=>Card(child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
         Text('${o['businessName'] ?? 'İşletme'}',style:const TextStyle(fontSize:18,fontWeight:FontWeight.w900)),
-        Text('${o['businessEmail'] ?? ''} • ${o['tagCount'] ?? 0} NFC tag'),
-        Text('Toplam: ${o['totalTry'] ?? 0} TL (örnek)'),
+        Text('${o['businessEmail'] ?? ''} • İşletme başına tek NFC etiketi'),
         Text('Teslimat: ${o['recipientName'] ?? ''} • ${o['province'] ?? ''} / ${o['district'] ?? ''}'),
         Text('Adres: ${o['address'] ?? ''}'),
         Text('Ödeme yöntemi: ${o['paymentMethod'] ?? 'Belirtilmedi'}'),
