@@ -967,21 +967,19 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
   final _title = TextEditingController();
   final _description = TextEditingController();
   bool _loading = true, _saving = false, _active = true;
+  List<Map<String,dynamic>> _branches = [];
+  String? _selectedCafeId;
 
   @override void initState() { super.initState(); _load(); }
   @override void dispose() { _goal.dispose(); _title.dispose(); _description.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     try {
-      final cafeId = widget.user['cafeId']?.toString();
-      if (cafeId == null) throw StateError('İşletme şubesi bulunamadı.');
-      final row = await cloud.from('cafe_rewards').select().eq('cafe_id', cafeId).maybeSingle();
-      if (row != null) {
-        _goal.text = (row['stamps_required'] ?? 8).toString();
-        _title.text = (row['reward_title'] ?? '').toString();
-        _description.text = (row['reward_description'] ?? '').toString();
-        _active = row['is_active'] == true;
-      }
+      final rows = await cloud.from('cafes').select('id,name,is_main_branch')
+        .eq('business_id', widget.user['id']).order('is_main_branch', ascending: false).order('created_at', ascending: true);
+      _branches = (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _selectedCafeId = widget.user['cafeId']?.toString() ?? (_branches.isEmpty ? null : _branches.first['id'].toString());
+      await _loadReward();
     } catch (error) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül ayarları yüklenemedi: $error')));
     } finally {
@@ -989,8 +987,19 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
     }
   }
 
+  Future<void> _loadReward() async {
+    final cafeId = _selectedCafeId;
+    if (cafeId == null) return;
+    final row = await cloud.from('cafe_rewards').select().eq('cafe_id', cafeId).maybeSingle();
+    _goal.text = (row?['stamps_required'] ?? 8).toString();
+    _title.text = (row?['reward_title'] ?? '').toString();
+    _description.text = (row?['reward_description'] ?? '').toString();
+    _active = row == null ? true : row['is_active'] == true;
+    if (mounted) setState(() {});
+  }
+
   Future<void> _save() async {
-    final cafeId = widget.user['cafeId']?.toString();
+    final cafeId = _selectedCafeId;
     final goal = int.tryParse(_goal.text.trim());
     if (cafeId == null || goal == null || goal < 1 || goal > 100 || _title.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('1–100 arasında damga sayısı ve ödül adı gir.')));
@@ -1015,7 +1024,7 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
   }
 
   Future<List<Map<String,dynamic>>> _pendingClaims() async {
-    final cafeId = widget.user['cafeId']?.toString();
+    final cafeId = _selectedCafeId;
     if (cafeId == null) return [];
     final rows = await cloud.from('reward_claims')
       .select('id,stamps_spent,reward_snapshot,created_at')
@@ -1043,6 +1052,13 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
     if (_loading) return const Center(child: CircularProgressIndicator());
     return ListView(padding: const EdgeInsets.all(20), children: [
       const Heading('Sadakat ödülü', 'Müşterinin kaç damgada hangi ödülü kazanacağını belirle.'),
+      DropdownButtonFormField<String>(
+        value: _selectedCafeId,
+        decoration: const InputDecoration(labelText: 'Şube'),
+        items: _branches.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name'].toString()))).toList(),
+        onChanged: (value) async { setState(() => _selectedCafeId = value); await _loadReward(); },
+      ),
+      const SizedBox(height: 12),
       TextField(controller: _goal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Gerekli damga sayısı (1–100)')),
       const SizedBox(height: 12),
       TextField(controller: _title, decoration: const InputDecoration(labelText: 'Ödül adı', hintText: 'Örn. Ücretsiz kahve')),
