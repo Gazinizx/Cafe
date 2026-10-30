@@ -38,6 +38,19 @@ Deno.serve(async (request: Request) => {
     .select("role").eq("id", targetId).maybeSingle();
   if (targetError || !target || target.role === "admin") return reply(404, { error: "Silinecek kullanıcı bulunamadı veya yönetici hesabı korunuyor." });
 
+  const { data: ownedCafes, error: cafesError } = await admin.from("cafes").select("id").eq("owner_id", targetId);
+  if (cafesError) return reply(400, { error: "Kullanıcı işletme kayıtları kontrol edilemedi." });
+  const cafeIds = (ownedCafes ?? []).map((c) => c.id);
+  const { error: customerEventsError } = await admin.from("stamp_events").delete().eq("customer_id", targetId);
+  if (customerEventsError) return reply(400, { error: "Kullanıcı damga geçmişi temizlenemedi." });
+  const { error: issuedEventsError } = await admin.from("stamp_events").delete().eq("issued_by", targetId);
+  if (issuedEventsError) return reply(400, { error: "Kullanıcı işlem kayıtları temizlenemedi." });
+  if (cafeIds.length > 0) {
+    const { error: cafeEventsError } = await admin.from("stamp_events").delete().in("cafe_id", cafeIds);
+    if (cafeEventsError) return reply(400, { error: "İşletme damga geçmişi temizlenemedi." });
+    const { error: cafesDeleteError } = await admin.from("cafes").delete().eq("owner_id", targetId);
+    if (cafesDeleteError) return reply(400, { error: "İşletme kayıtları silinemedi." });
+  }
   const { error: deleteError } = await admin.auth.admin.deleteUser(targetId);
   if (deleteError) return reply(400, { error: "Kullanıcı hesabı silinemedi." });
   return reply(200, { success: true, message: "Kullanıcı hesabı silindi." });
