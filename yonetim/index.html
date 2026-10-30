@@ -92,6 +92,8 @@ async function setBusinessStatus(id,status){
  if(e2)throw e2;
  const {error:e3}=await db.from("cafes").update({is_active:status==="approved"}).eq("business_id",id);
  if(e3)throw e3;
+ const {error:e4}=await db.from("business_orders").update({order_status:status==="approved"?"Etiket hazırlanıyor":"Başvuru reddedildi"}).eq("business_id",id);
+ if(e4)throw e4;
  toast(status==="approved"?"İşletme onaylandı.":"Başvuru reddedildi.");await loadApplications();await loadOverview();
 }
 async function loadDelivery(){
