@@ -822,7 +822,8 @@ class _CustomerCardsState extends State<CustomerCards>{
            if (mounted) setState(() => _scanning = false);
          }
        },
-       onError: (error) {
+       onError: (error) async {
+         try { await NfcManager.instance.stopSession(errorMessage: 'NFC oturumu tamamlanamadı.'); } catch (_) {}
          if (mounted) setState(() => _scanning = false);
          _message('NFC oturumu tamamlanamadı. Tekrar dene.');
        },
