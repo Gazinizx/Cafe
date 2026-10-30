@@ -33,7 +33,7 @@ jobs:
           cache: true
       - name: Android platform dosyalarını oluştur
         working-directory: mobil
-        run: flutter create --platforms=android --project-name cafe_dunyam .
+        run: flutter create --platforms=android --org com.cafedunyam --project-name app .
       - name: Simge dönüştürme aracını izole kur
         run: |
           python3 -m venv /tmp/cafe-icon-venv
