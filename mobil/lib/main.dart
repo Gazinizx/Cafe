@@ -913,12 +913,97 @@ class _BusinessShellState extends State<BusinessShell>{
  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Cafe Dünyam • İşletme')),body:SafeArea(child:IndexedStack(index:tab,children:[
  BusinessDashboard(user:widget.user),
  BusinessDeals(user:widget.user),
+ BusinessRewardSettings(user:widget.user),
  BusinessSettings(user:widget.user),
  ])),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const[
  NavigationDestination(icon:Icon(Icons.dashboard_outlined),label:'Panel'),
  NavigationDestination(icon:Icon(Icons.campaign_outlined),label:'Kampanyalar'),
+ NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),label:'Ödül'),
  NavigationDestination(icon:Icon(Icons.storefront_outlined),label:'İşletmem'),
  ]));
+}
+
+class BusinessRewardSettings extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const BusinessRewardSettings({required this.user, super.key});
+  @override State<BusinessRewardSettings> createState() => _BusinessRewardSettingsState();
+}
+class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
+  final _goal = TextEditingController(text: '8');
+  final _title = TextEditingController();
+  final _description = TextEditingController();
+  bool _loading = true, _saving = false, _active = true;
+
+  @override void initState() { super.initState(); _load(); }
+  @override void dispose() { _goal.dispose(); _title.dispose(); _description.dispose(); super.dispose(); }
+
+  Future<void> _load() async {
+    try {
+      final cafeId = widget.user['cafeId']?.toString();
+      if (cafeId == null) throw StateError('İşletme şubesi bulunamadı.');
+      final row = await cloud.from('cafe_rewards').select().eq('cafe_id', cafeId).maybeSingle();
+      if (row != null) {
+        _goal.text = (row['stamps_required'] ?? 8).toString();
+        _title.text = (row['reward_title'] ?? '').toString();
+        _description.text = (row['reward_description'] ?? '').toString();
+        _active = row['is_active'] == true;
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül ayarları yüklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _save() async {
+    final cafeId = widget.user['cafeId']?.toString();
+    final goal = int.tryParse(_goal.text.trim());
+    if (cafeId == null || goal == null || goal < 1 || goal > 100 || _title.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('1–100 arasında damga sayısı ve ödül adı gir.')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await cloud.from('cafe_rewards').upsert({
+        'cafe_id': cafeId,
+        'stamps_required': goal,
+        'reward_title': _title.text.trim(),
+        'reward_description': _description.text.trim(),
+        'is_active': _active,
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      });
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sadakat ödülü kaydedildi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül kaydedilemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return ListView(padding: const EdgeInsets.all(20), children: [
+      const Heading('Sadakat ödülü', 'Müşterinin kaç damgada hangi ödülü kazanacağını belirle.'),
+      TextField(controller: _goal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Gerekli damga sayısı (1–100)')),
+      const SizedBox(height: 12),
+      TextField(controller: _title, decoration: const InputDecoration(labelText: 'Ödül adı', hintText: 'Örn. Ücretsiz kahve')),
+      const SizedBox(height: 12),
+      TextField(controller: _description, minLines: 2, maxLines: 4, decoration: const InputDecoration(labelText: 'Ödül açıklaması')),
+      const SizedBox(height: 12),
+      SwitchListTile(
+        contentPadding: EdgeInsets.zero,
+        title: const Text('Ödül programı aktif'),
+        value: _active,
+        onChanged: (value) => setState(() => _active = value),
+      ),
+      const SizedBox(height: 12),
+      FilledButton.icon(
+        onPressed: _saving ? null : _save,
+        icon: const Icon(Icons.save_outlined),
+        label: Text(_saving ? 'Kaydediliyor…' : 'Ödül ayarlarını kaydet'),
+      ),
+    ]);
+  }
 }
 class BusinessDashboard extends StatelessWidget{
  final Map<String,dynamic> user;const BusinessDashboard({required this.user,super.key});
