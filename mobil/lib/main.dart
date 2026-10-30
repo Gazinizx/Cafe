@@ -287,19 +287,21 @@ class LocalData {
         return;
       }
       if (key == dealsKey) {
-        final cafe = await cloud.from('cafes').select('id').eq('owner_id', auth.id).order('is_main_branch', ascending: false).order('created_at', ascending: true).limit(1).maybeSingle();
-        final ownedCafeId = cafe?['id']?.toString();
-        if (ownedCafeId != null) {
-          final desired = value.where((d) => d['cafeId'] == ownedCafeId || d['ownerId'] == auth.id || d['ownerEmail'] == auth.email || (d['id']?.toString().startsWith('local-') == true)).toList();
-          final oldRows = await cloud.from('campaigns').select('id').eq('cafe_id', ownedCafeId);
+        final ownedRows = await cloud.from('cafes').select('id').eq('owner_id', auth.id);
+        final ownedCafeIds = (ownedRows as List).map((r) => r['id'].toString()).toSet();
+        if (ownedCafeIds.isNotEmpty) {
+          final desired = value.where((d) => ownedCafeIds.contains(d['cafeId']?.toString()) || d['ownerId'] == auth.id || d['ownerEmail'] == auth.email || (d['id']?.toString().startsWith('local-') == true)).toList();
+          final oldRows = await cloud.from('campaigns').select('id').inFilter('cafe_id', ownedCafeIds.toList());
           final desiredIds = desired.map((d) => d['id']?.toString()).whereType<String>().where(_uuid).toSet();
           for (final old in (oldRows as List)) {
             final id = old['id'].toString();
             if (!desiredIds.contains(id)) await cloud.from('campaigns').delete().eq('id', id);
           }
           for (final d in desired) {
+            final requestedCafeId = d['cafeId']?.toString();
+            final targetCafeId = ownedCafeIds.contains(requestedCafeId) ? requestedCafeId : ownedCafeIds.first;
             final payload = <String,dynamic>{
-              'cafe_id': ownedCafeId, 'title': d['title'] ?? '',
+              'cafe_id': targetCafeId, 'title': d['title'] ?? '',
               'benefit': d['benefit'] ?? '', 'audience': d['audience'] ?? 'Herkes',
               'is_active': d['active'] == true,
             };
@@ -1260,7 +1262,19 @@ class _BusinessDealsState extends State<BusinessDeals> {
   final title = TextEditingController(), benefit = TextEditingController();
   String audience = 'Herkes';
   bool busy = false;
+  List<Map<String,dynamic>> _branches = [];
+  String? _selectedCafeId;
+  @override void initState() { super.initState(); _loadBranches(); }
   @override void dispose() { title.dispose(); benefit.dispose(); super.dispose(); }
+  Future<void> _loadBranches() async {
+    try {
+      final rows = await cloud.from('cafes').select('id,name,is_main_branch')
+        .eq('business_id', widget.user['id']).order('is_main_branch', ascending: false).order('created_at', ascending: true);
+      _branches = (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _selectedCafeId = widget.user['cafeId']?.toString() ?? (_branches.isEmpty ? null : _branches.first['id'].toString());
+      if (mounted) setState(() {});
+    } catch (error) { _reportSyncError(error); }
+  }
   bool _canManage(Map<String,dynamic> d) => widget.user['role'] == 'admin' || d['ownerEmail'] == widget.user['email'];
   void _reportSyncError(Object error) {
     if (!mounted) return;
@@ -1273,7 +1287,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
     setState(() => busy = true);
     try {
       final deals = await LocalData.list(dealsKey, starterDeals);
-      deals.insert(0, {'id':'local-${DateTime.now().microsecondsSinceEpoch}','title':title.text.trim(),'benefit':benefit.text.trim(),'audience':audience,'cafeId':widget.user['cafeId'] ?? widget.user['email'],'active':true,'ownerEmail':widget.user['email'],'ownerName':widget.user['cafeName'] ?? widget.user['name']});
+      deals.insert(0, {'id':'local-${DateTime.now().microsecondsSinceEpoch}','title':title.text.trim(),'benefit':benefit.text.trim(),'audience':audience,'cafeId':_selectedCafeId ?? widget.user['cafeId'] ?? widget.user['email'],'active':true,'ownerEmail':widget.user['email'],'ownerName':widget.user['cafeName'] ?? widget.user['name']});
       await LocalData.saveList(dealsKey, deals);
       title.clear(); benefit.clear();
       if (mounted) setState(() {});
@@ -1341,6 +1355,13 @@ class _BusinessDealsState extends State<BusinessDeals> {
   }
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
     const Heading('Kampanyalar', 'Yalnızca kendi kampanyalarını yönetebilirsin.'),
+    DropdownButtonFormField<String>(
+      value: _selectedCafeId,
+      decoration: const InputDecoration(labelText: 'Kampanyanın yayınlanacağı şube'),
+      items: _branches.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name'].toString()))).toList(),
+      onChanged: (value) => setState(() => _selectedCafeId = value),
+    ),
+    const SizedBox(height: 10),
     TextField(controller: title, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
     const SizedBox(height: 10),
     TextField(controller: benefit, decoration: const InputDecoration(labelText: 'İndirim / avantaj açıklaması')),
