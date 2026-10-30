@@ -124,11 +124,11 @@ grant execute on function public.is_business_member(uuid) to anon, authenticated
 
 drop policy if exists "memberships_read_business" on public.cafe_memberships;
 create policy "memberships_read_business" on public.cafe_memberships for select to authenticated
-using (exists (select 1 from public.cafes c where c.id = cafe_id and public.is_business_member(c.business_id)));
+using (public.can_access_cafe(cafe_id));
 
 drop policy if exists "stamp_events_read_business" on public.stamp_events;
 create policy "stamp_events_read_business" on public.stamp_events for select to authenticated
-using (exists (select 1 from public.cafes c where c.id = cafe_id and public.is_business_member(c.business_id)) or public.is_cafe_admin());
+using (public.can_access_cafe(cafe_id));
 
 drop policy if exists "business_employees_read" on public.business_employees;
 drop policy if exists "business_employees_manage" on public.business_employees;
@@ -148,7 +148,7 @@ using (public.is_cafe_admin()) with check (public.is_cafe_admin());
 drop policy if exists "cafe_rewards_read_active" on public.cafe_rewards;
 drop policy if exists "cafe_rewards_business_manage" on public.cafe_rewards;
 create policy "cafe_rewards_read_active" on public.cafe_rewards for select to anon, authenticated
-using (is_active or exists (select 1 from public.cafes c where c.id = cafe_id and public.is_business_member(c.business_id)) or public.is_cafe_admin());
+using (is_active or public.can_access_cafe(cafe_id));
 create policy "cafe_rewards_business_manage" on public.cafe_rewards for all to authenticated
 using (exists (select 1 from public.cafes c where c.id = cafe_id and (c.business_id = auth.uid() or public.is_cafe_admin())))
 with check (exists (select 1 from public.cafes c where c.id = cafe_id and (c.business_id = auth.uid() or public.is_cafe_admin())));
@@ -292,6 +292,7 @@ begin
   if not exists (
     select 1 from public.business_employees e
     where e.business_id = v_business_id and e.employee_id = p_issued_by and e.is_active
+      and (e.branch_id is null or e.branch_id = p_cafe_id)
   ) and p_issued_by <> v_business_id then
     raise exception 'Employee is not authorized for this business';
   end if;
@@ -342,6 +343,12 @@ begin
     into v_goal, v_title, v_description
   from public.cafe_rewards where cafe_id = p_cafe_id and is_active;
   if v_goal is null then raise exception 'No active reward configured'; end if;
+  if not exists (select 1 from public.profiles p where p.id = p_customer_id and p.role = 'customer' and p.approval_status = 'approved') then
+    raise exception 'Customer account is not valid';
+  end if;
+  if not exists (select 1 from public.cafes c where c.id = p_cafe_id and c.is_active) then
+    raise exception 'Cafe is not active';
+  end if;
   perform pg_advisory_xact_lock(hashtextextended(p_customer_id::text || ':' || p_cafe_id::text, 0));
   select stamps into v_current from public.cafe_memberships
     where customer_id = p_customer_id and cafe_id = p_cafe_id for update;
@@ -356,3 +363,58 @@ end;
 $function$;
 revoke all on function public.claim_cafe_reward(uuid,uuid) from public, anon, authenticated;
 grant execute on function public.claim_cafe_reward(uuid,uuid) to service_role;
+
+
+-- Employee access is branch-scoped. A NULL branch_id explicitly means all branches.
+create or replace function public.can_access_cafe(target_cafe_id uuid)
+returns boolean language sql stable security definer set search_path = ''
+as $access$
+  select public.is_cafe_admin()
+    or exists (
+      select 1 from public.cafes c
+      join public.profiles p on p.id = c.business_id
+      where c.id = target_cafe_id and p.id = auth.uid()
+        and p.role = 'business' and p.approval_status = 'approved'
+    )
+    or exists (
+      select 1 from public.business_employees e
+      join public.cafes c on c.business_id = e.business_id
+      where c.id = target_cafe_id and e.employee_id = auth.uid()
+        and e.is_active and (e.branch_id is null or e.branch_id = target_cafe_id)
+    );
+$access$;
+revoke all on function public.can_access_cafe(uuid) from public;
+grant execute on function public.can_access_cafe(uuid) to authenticated;
+
+drop policy if exists "memberships_read_business" on public.cafe_memberships;
+create policy "memberships_read_business" on public.cafe_memberships for select to authenticated
+using (public.can_access_cafe(cafe_id));
+
+drop policy if exists "stamp_events_read_business" on public.stamp_events;
+create policy "stamp_events_read_business" on public.stamp_events for select to authenticated
+using (public.can_access_cafe(cafe_id));
+
+drop policy if exists "cafe_rewards_read_active" on public.cafe_rewards;
+create policy "cafe_rewards_read_active" on public.cafe_rewards for select to anon, authenticated
+using (is_active or public.can_access_cafe(cafe_id));
+
+drop policy if exists "business_employees_manage" on public.business_employees;
+create policy "business_employees_manage" on public.business_employees for all to authenticated
+using (
+  (business_id = auth.uid() and exists (
+    select 1 from public.profiles p where p.id = auth.uid()
+      and p.role = 'business' and p.approval_status = 'approved'
+  )) or public.is_cafe_admin()
+)
+with check (
+  (
+    business_id = auth.uid() and exists (
+      select 1 from public.profiles p where p.id = auth.uid()
+        and p.role = 'business' and p.approval_status = 'approved'
+    ) and (
+      branch_id is null or exists (
+        select 1 from public.cafes c where c.id = branch_id and c.business_id = business_id
+      )
+    )
+  ) or public.is_cafe_admin()
+);
