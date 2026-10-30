@@ -170,14 +170,23 @@ class LocalData {
       final profile = await cloud.from('profiles').select('role').eq('id', auth.id).maybeSingle();
       final isAdmin = profile?['role'] == 'admin';
       if (key == cafesKey) {
-        final rows = await cloud.from('cafes').select().order('name');
+        final rows = await cloud.from('cafes')
+          .select('*, cafe_rewards(stamps_required,reward_title,reward_description,is_active)')
+          .order('name');
         return (rows as List).map((raw) {
           final r = Map<String,dynamic>.from(raw as Map);
+          final rewardRaw = r['cafe_rewards'];
+          final reward = rewardRaw is List
+            ? (rewardRaw.isNotEmpty ? Map<String,dynamic>.from(rewardRaw.first as Map) : <String,dynamic>{})
+            : rewardRaw is Map ? Map<String,dynamic>.from(rewardRaw) : <String,dynamic>{};
+          final rewardActive = reward['is_active'] == true;
+          final goal = rewardActive ? (reward['stamps_required'] as num?)?.toInt() ?? 0 : 0;
           return <String,dynamic>{
             'id': r['id'], 'name': r['name'], 'city': r['city'],
-            'type': r['category'] ?? 'Kafe', 'goal': 8,
-            'reward': '8 damgada ödül', 'active': r['is_active'] == true,
-            'ownerId': r['owner_id'], 'address': r['address'],
+            'type': r['category'] ?? 'Kafe', 'goal': goal,
+            'reward': rewardActive ? (reward['reward_title'] ?? 'Ödül') : 'Ödül henüz tanımlanmadı',
+            'active': r['is_active'] == true,
+            'ownerId': r['owner_id'], 'businessId': r['business_id'], 'address': r['address'],
           };
         }).toList();
       }
@@ -828,11 +837,11 @@ class _CustomerCardsState extends State<CustomerCards>{
  if(!s.hasData)return const Center(child:CircularProgressIndicator());
  final cafes=s.data![0] as List<Map<String,dynamic>>;final stamps=s.data![1] as Map<String,int>;
  return Column(children:cafes.map((c){
- final count=stamps[c['id']]??0;final goal=(c['goal'] as num).toInt();
+ final count=stamps[c['id']]??0;final goal=(c['goal'] as num?)?.toInt()??0;
  return Card(child:Padding(padding:const EdgeInsets.all(15),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
  Text('${c['name']}',style:const TextStyle(fontWeight:FontWeight.bold,fontSize:17)),const SizedBox(height:10),
- LinearProgressIndicator(value:(count/goal).clamp(0.0,1.0),minHeight:8),
- const SizedBox(height:8),Text('$count / $goal damga • ${c['reward']}'),
+ LinearProgressIndicator(value:goal > 0 ? (count/goal).clamp(0.0,1.0) : 0.0,minHeight:8),
+ const SizedBox(height:8),Text(goal > 0 ? '$count / $goal damga • ${c['reward']}' : c['reward'].toString()),
  ])));
  }).toList());
  }),
