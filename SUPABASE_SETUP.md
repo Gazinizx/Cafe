@@ -15,7 +15,7 @@ Canlı veritabanı açıldıktan sonra migration'ları sırayla uygula:
 3. `supabase/migrations/20261030214000_security_hardening.sql`
 4. `supabase/migrations/20261030220000_rls_policy_fixups.sql`
 
-İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Üçüncü migration RLS yönetim politikalarını daraltır ve yabancı anahtar indekslerini ekler. Dördüncü migration şube/çalışan yetki kontrolünü düzeltir ve herkese açık paket listelemesini güvenli biçimde ayırır. Bu migration tek başına NFC kriptografik doğrulama servisini kurmaz. NTAG doğrulaması yapan güvenli Edge Function kurulup gerçek etiketle test edilmeden damga üretimini canlıya açma.
+İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Üçüncü migration RLS yönetim politikalarını daraltır ve yabancı anahtar indekslerini ekler. Dördüncü migration şube/çalışan yetki kontrolünü düzeltir ve herkese açık paket listelemesini güvenli biçimde ayırır. Bu migration tek başına NFC kriptografik doğrulama servisini kurmaz. NTAG doğrulaması yapan `verify-nfc-stamp` Edge Function dağıtıldı ve JWT zorunlu. Gerçek etiketle test etmeden damga üretimini canlıya açma.
 
 Ödeme sağlayıcısı şu aşamada entegre edilmeyecek. İşletmelerden nakit veya banka havalesi alınabilir; tahsilat, yalnızca yönetici tarafından doğrulandıktan sonra onaylanmalıdır. Müşteri/işletme istemcisi kendi ödeme kaydını "ödendi" durumuna getirememelidir.
 
@@ -61,3 +61,16 @@ GitHub yetkilendirmesi, Supabase projesi oluşturma ve hesap onayı kullanıcı 
 - iOS için Apple imzalama ve App Store Connect erişimi gerekir.
 
 Uygulama kodu bulut veri erişimini kullanır; ancak veritabanı şeması Supabase projesinde çalıştırılmadan ve gerçek Android/iOS cihazlarda uçtan uca test edilmeden sistemin tamamen hazır olduğu söylenemez. NFC damgası verme bilerek istemciye açılmamıştır; gerçek satın alma doğrulaması yapan güvenilir bir sunucu/Edge Function eklenmelidir.
+
+
+## NFC etiketi güvenli kurulumu
+
+- Edge Function: `supabase/functions/verify-nfc-stamp/index.ts`
+- Kriptografi: `supabase/functions/_shared/ntag424.js`
+- Testler: `supabase/functions/_shared/ntag424_test.ts`
+- Sunucu anahtarları istemciye veya GitHub deposuna konulmaz. Supabase Edge Function Secrets alanında `NFC_SDM_KEYS_JSON` tanımla. JSON anahtarları, veritabanındaki `nfc_tags.secret_reference` değerleriyle eşleşmelidir; değerler 16 baytlık AES anahtarlarının 32 karakterlik hex karşılığıdır.
+- NTAG 424 DNA, AES SDM modunda UID + sayaç + CMAC aynalama yapacak şekilde programlanmalıdır. URL parametreleri `uid`, `ctr` ve `c` olmalı; SDM MAC input başlangıç ofseti ile CMAC ofseti aynı ayarlanmalıdır. Sunucu sayaç değerini veritabanında saklar ve eski sayaçları reddeder.
+- Etiket kaydı yalnızca sunucu tarafında yapılır. Her işletme için tek satır `nfc_tags` kaydı oluştur; `tag_uid` büyük harfli 7-byte UID, `secret_reference` gizli anahtar haritasındaki anahtar adı, `branch_id` ise etiketi kullanacak etkin şubedir.
+- Edge Function dağıtımı: `supabase functions deploy verify-nfc-stamp`
+- Sunucu anahtarını ayarlama örneği: `supabase secrets set NFC_SDM_KEYS_JSON='{"<secret_reference>":"<32_HEX_AES_KEY>"}'`
+- Etiket gerçek cihazda okutulmadan, sayaç tekrar testi ve 10 dakika kuralı doğrulanmadan NFC özelliğini üretimde kullanıma açma.
