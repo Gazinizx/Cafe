@@ -25,6 +25,7 @@ Canlı veritabanı açıldıktan sonra migration'ları sırayla uygula:
 11. `supabase/migrations/20261030234000_business_uniqueness.sql`
 12. `supabase/migrations/20261030235000_nfc_branch_metadata_access.sql`
 13. `supabase/migrations/20261030240000_main_branch_default.sql`
+14. `supabase/migrations/20261030241000_private_admin_authorization.sql`
 
 İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Üçüncü ve dördüncü migration'lar RLS yetkilerini daraltır, şube/çalışan erişimini düzeltir ve indeksleri ekler. Sonraki migration'lar NFC sayaç tekrar korumasını, ödül teslimini, özel erişim yardımcısını, nakit/havale abonelik tahsilatını ve paket şube/çalışan limitlerini ekler. NTAG doğrulaması yapan `verify-nfc-stamp` Edge Function dağıtıldı ve JWT zorunlu. Gerçek etiketle test etmeden damga üretimini canlıya açma.
 
@@ -85,7 +86,7 @@ Uygulama kodu ve sunucu uç noktaları bulut veri erişimini kullanır; ancak ge
 - Sunucu anahtarları istemciye veya GitHub deposuna konulmaz. Supabase Edge Function Secrets alanında `NFC_SDM_KEYS_JSON` tanımla. JSON anahtarları, veritabanındaki `nfc_tags.secret_reference` değerleriyle eşleşmelidir; değerler 16 baytlık AES anahtarlarının 32 karakterlik hex karşılığıdır.
 - NTAG 424 DNA, AES SDM modunda UID + sayaç + CMAC aynalama yapacak şekilde programlanmalıdır. URL parametreleri `uid`, `ctr` ve `c` olmalı; SDM MAC input başlangıç ofseti ile CMAC ofseti aynı ayarlanmalıdır. Sunucu sayaç değerini veritabanında saklar ve eski sayaçları reddeder.
 - Etiket kaydı yalnızca sunucu tarafında yapılır. Her işletme için tek satır `nfc_tags` kaydı oluştur; `tag_uid` büyük harfli 7-byte UID, `secret_reference` gizli anahtar haritasındaki anahtar adı, `branch_id` ise etiketi kullanacak etkin şubedir.
-- Dağıtılmış Edge Function'lar: `verify-nfc-stamp`, `claim-cafe-reward`, `redeem-cafe-reward`, `find-business-employee`, `manage-nfc-tag`. Bunlar JWT doğrulaması ister.
+- Dağıtılmış Edge Function'lar: `verify-nfc-stamp`, `claim-cafe-reward`, `redeem-cafe-reward`, `find-business-employee`, `manage-nfc-tag`, `admin-delete-user`. Bunlar JWT doğrulaması ister.
 - Sunucu anahtarını ayarlama örneği: `supabase secrets set NFC_SDM_KEYS_JSON='{"<secret_reference>":"<32_HEX_AES_KEY>"}'`
 - Etiket gerçek cihazda okutulmadan, sayaç tekrar testi ve 10 dakika kuralı doğrulanmadan NFC özelliğini üretimde kullanıma açma.
 
