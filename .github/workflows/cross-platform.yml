@@ -84,6 +84,39 @@ jobs:
       - name: Generate iOS platform files
         working-directory: mobil
         run: flutter create --platforms=ios --project-name cafe_dunyam .
+      - name: Configure iOS NFC reader permission
+        working-directory: mobil
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import plistlib
+
+          info_path = Path("ios/Runner/Info.plist")
+          with info_path.open("rb") as f:
+              info = plistlib.load(f)
+          info["NFCReaderUsageDescription"] = "Cafe Dünyam sadakat damgası kazanmak için işletmenin NFC etiketini okur."
+          with info_path.open("wb") as f:
+              plistlib.dump(info, f)
+
+          entitlements_path = Path("ios/Runner/Runner.entitlements")
+          entitlements = {}
+          if entitlements_path.exists():
+              with entitlements_path.open("rb") as f:
+                  entitlements = plistlib.load(f)
+          entitlements["com.apple.developer.nfc.readersession.formats"] = ["NDEF"]
+          with entitlements_path.open("wb") as f:
+              plistlib.dump(entitlements, f)
+
+          project_path = Path("ios/Runner.xcodeproj/project.pbxproj")
+          project = project_path.read_text()
+          if "CODE_SIGN_ENTITLEMENTS" not in project:
+              project = project.replace(
+                  "PRODUCT_BUNDLE_IDENTIFIER =",
+                  "CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;\\n\\t\\t\\t\\tPRODUCT_BUNDLE_IDENTIFIER ="
+              )
+          project = project.replace("IPHONEOS_DEPLOYMENT_TARGET = 12.0;", "IPHONEOS_DEPLOYMENT_TARGET = 13.0;")
+          project_path.write_text(project)
+          PY
       - name: Install dependencies
         working-directory: mobil
         run: flutter pub get
