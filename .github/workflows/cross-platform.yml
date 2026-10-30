@@ -117,9 +117,20 @@ jobs:
           project = project.replace("IPHONEOS_DEPLOYMENT_TARGET = 12.0;", "IPHONEOS_DEPLOYMENT_TARGET = 13.0;")
           project_path.write_text(project)
           PY
+      - name: Generate launcher icon source
+        working-directory: mobil
+        run: |
+          python3 -m pip install --user cairosvg
+          python3 - <<'PY'
+          import cairosvg
+          cairosvg.svg2png(url="assets/cafe_icon.svg", write_to="assets/app_icon.png", output_width=512, output_height=512)
+          PY
       - name: Install dependencies
         working-directory: mobil
         run: flutter pub get
+      - name: Generate iOS launcher icon
+        working-directory: mobil
+        run: dart run flutter_launcher_icons
       - name: Analyze
         working-directory: mobil
         run: flutter analyze --no-pub --no-fatal-infos --no-fatal-warnings
