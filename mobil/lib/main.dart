@@ -52,6 +52,7 @@ Future<Map<String, dynamic>> cloudProfile(User authUser) async {
     'id': authUser.id,
     'name': (row['full_name'] ?? authUser.email ?? 'Kullanıcı').toString(),
     'email': (row['email'] ?? authUser.email ?? '').toString(),
+    'phone': (row['phone'] ?? '').toString(),
     'role': role,
     'approvalStatus': (row['approval_status'] ?? 'pending').toString(),
     'cloudAccount': true,

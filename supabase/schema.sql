@@ -215,9 +215,10 @@ declare requested_role text;
 begin
   requested_role := coalesce(new.raw_user_meta_data ->> 'role', 'customer');
   if requested_role not in ('customer','business') then requested_role := 'customer'; end if;
-  insert into public.profiles (id, full_name, email, role, approval_status)
+  insert into public.profiles (id, full_name, email, role, approval_status, phone)
   values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name',''), new.email, requested_role,
-          case when requested_role = 'business' then 'pending' else 'approved' end);
+          case when requested_role = 'business' then 'pending' else 'approved' end,
+          nullif(new.raw_user_meta_data ->> 'phone',''));
 
   if requested_role = 'business' then
     insert into public.business_applications (

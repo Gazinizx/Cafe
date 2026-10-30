@@ -6,12 +6,12 @@ Flutter tabanlı Android ve iOS uygulaması.
 - `yonetim/index.html`: Supabase Auth ile giriş yapılan web yönetim paneli.
 - `.github/workflows/android-apk.yml`: Android release APK derlemesi ve artifact çıktısı.
 - `.github/workflows/cross-platform.yml`: Android analiz/testleri ve iOS simülatör analiz/test/derlemesi.
-- `supabase/schema.sql` ve `supabase/migrations/`: Supabase tabloları ve RLS politikaları. Üretim temeli migration'ı şube/çalışan, NFC kayıt defteri, ödül, paket/abonelik ve manuel tahsilat tablolarını ekler.
+- `supabase/schema.sql` ve `supabase/migrations/`: Supabase tabloları, RLS politikaları ve Auth kayıt tetikleyicileri. Müşteri ve işletme telefonları profil tablosuna kaydedilir; üretim migration'ları şube/çalışan, NFC kayıt defteri, ödül, paket/abonelik ve manuel tahsilat tablolarını ekler.
 - `SUPABASE_SETUP.md`: bulut kurulumu ve güvenlik notları.
 
 ## Veri ve platform senkronizasyonu
 
-- Kayıt/giriş Supabase Auth üzerinden yapılır. Android ve iOS cihazlarında **aynı Supabase projesi ve aynı kullanıcı hesabı** kullanıldığında, uygulamanın buluta bağladığı profil, kafe, kampanya, kayıtlı kampanya ve işletme başvurusu/sipariş verileri ortak veritabanından okunur.
+- Kayıt/giriş Supabase Auth üzerinden yapılır. Müşteri kaydında ad soyad, e-posta, telefon ve parola istenir; işletme yetkilisinin adı ayrı bir alandır. Auth tetikleyicisi telefon numarasını `profiles.phone` alanına kaydeder. Android ve iOS cihazlarında **aynı Supabase projesi ve aynı kullanıcı hesabı** kullanıldığında, uygulamanın buluta bağladığı profil, kafe, kampanya, kayıtlı kampanya ve işletme başvurusu/sipariş verileri ortak veritabanından okunur.
 - `SharedPreferences` cihaz içi tercih ve oturum saklama gibi yerel amaçlar içindir. Oturum açmış bir bulut hesabının bulut kaydı yapılamazsa veri artık sessizce cihaz belleğine yazılmaz; hata gösterilir.
 - Oturum açılmadan gösterilen örnek kafe/kampanya verileri cihazlar arasında eşitlenmez.
 - Müşteri damga bakiyesi `cafe_memberships` tablosundan okunur. Mobil istemcinin doğrudan damga yazmasına izin verilmez; NTAG 424 DNA doğrulama Edge Function'ı dağıtıldı; sunucu anahtarı ve fiziksel etiket yapılandırılmadan NFC damga işlemi başarılı olmaz.

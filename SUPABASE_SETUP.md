@@ -11,7 +11,7 @@ Not: Bu proje `eu-west-3` (Paris) bölgesindedir. Supabase'in yayımladığı g�
 
 ## 2. Şemaları uygulama
 
-Önemli: Mevcut `phsmojbrbszobpyeeipc` Cafe Dünyam projesinde migration'lar zaten uygulanmıştır. Supabase migration geçmişinde 19 kayıt bulunuyor; 15 adet `public` tablonun tamamı mevcut ve RLS etkin. **Bu mevcut projede aşağıdaki SQL dosyalarını yeniden çalıştırma.** Aşağıdaki liste depodaki kaynak dosyaların sırasını gösterir. Canlı veritabanındaki ilk üç tarihli bootstrap kaydı (`cafe_dunyam_initial_schema`, `restrict_internal_function_execution`, `restore_policy_helper_permissions`) depodaki migration dosyalarıyla birebir aynı dosya adlarına sahip değildir; bu nedenle bu liste tek başına yeni bir Supabase projesini sıfırdan kurmak için kullanılmamalıdır. Yeni proje kurulumu gerekirse önce bu tarihsel bootstrap SQL'leri de kaynak koda eklenip temiz kurulum testi yapılmalıdır.
+Önemli: Mevcut `phsmojbrbszobpyeeipc` Cafe Dünyam projesinde migration'lar zaten uygulanmıştır. Supabase migration geçmişinde 20 kayıt bulunuyor; 15 adet `public` tablonun tamamı mevcut ve RLS etkin. **Bu mevcut projede aşağıdaki SQL dosyalarını yeniden çalıştırma.** Aşağıdaki liste depodaki kaynak dosyaların sırasını gösterir. Canlı veritabanındaki ilk üç tarihli bootstrap kaydı (`cafe_dunyam_initial_schema`, `restrict_internal_function_execution`, `restore_policy_helper_permissions`) depodaki migration dosyalarıyla birebir aynı dosya adlarına sahip değildir; bu nedenle bu liste tek başına yeni bir Supabase projesini sıfırdan kurmak için kullanılmamalıdır. Yeni proje kurulumu gerekirse önce bu tarihsel bootstrap SQL'leri de kaynak koda eklenip temiz kurulum testi yapılmalıdır.
 1. `supabase/migrations/20261014000000_initial_schema.sql`
 2. `supabase/migrations/20261030210000_production_foundation.sql`
 3. `supabase/migrations/20261030214000_security_hardening.sql`
@@ -29,8 +29,9 @@ Not: Bu proje `eu-west-3` (Paris) bölgesindedir. Supabase'in yayımladığı g�
 15. `supabase/migrations/20261030242000_rls_auth_uid_cache.sql`
 16. `supabase/migrations/20261030243000_rls_policy_consolidation.sql`
 17. `supabase/migrations/20261030244000_single_tag_delivery_order.sql`
+18. `supabase/migrations/20261030245000_customer_profile_phone.sql`
 
-İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Üçüncü ve dördüncü migration'lar RLS yetkilerini daraltır, şube/çalışan erişimini düzeltir ve indeksleri ekler. Sonraki migration'lar NFC sayaç tekrar korumasını, ödül teslimini, özel erişim yardımcısını, nakit/havale abonelik tahsilatını ve paket şube/çalışan limitlerini ekler. NTAG doğrulaması yapan `verify-nfc-stamp` Edge Function dağıtıldı ve JWT zorunlu. Gerçek etiketle test etmeden damga üretimini canlıya açma.
+Son migration müşteri ve işletme kayıtlarında gelen telefon numarasını `profiles.phone` alanına kaydeder ve mevcut Auth metadata verisinden boş profil telefonlarını tamamlar. İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Üçüncü ve dördüncü migration'lar RLS yetkilerini daraltır, şube/çalışan erişimini düzeltir ve indeksleri ekler. Sonraki migration'lar NFC sayaç tekrar korumasını, ödül teslimini, özel erişim yardımcısını, nakit/havale abonelik tahsilatını ve paket şube/çalışan limitlerini ekler. NTAG doğrulaması yapan `verify-nfc-stamp` Edge Function dağıtıldı ve JWT zorunlu. Gerçek etiketle test etmeden damga üretimini canlıya açma.
 
 Ödeme sağlayıcısı şu aşamada entegre edilmeyecek. İşletmelerden nakit veya banka havalesi alınabilir; tahsilat, yalnızca yönetici tarafından doğrulandıktan sonra onaylanmalıdır. Müşteri/işletme istemcisi kendi ödeme kaydını "ödendi" durumuna getirememelidir.
 

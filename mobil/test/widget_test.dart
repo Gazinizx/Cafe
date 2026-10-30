@@ -32,4 +32,30 @@ void main() {
     expect(find.text('Parolamı unuttum'), findsOneWidget);
     expect(find.text('Giriş yap'), findsWidgets);
   });
+
+  testWidgets('customer registration asks only for full name, email, phone and password', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AuthPage(register: true, initialRole: 'customer', onDone: (_) {}),
+    ));
+    await tester.pump();
+
+    expect(find.text('Ad Soyad'), findsOneWidget);
+    expect(find.text('E-posta'), findsOneWidget);
+    expect(find.text('Telefon numarası'), findsOneWidget);
+    expect(find.text('Parola'), findsOneWidget);
+    expect(find.text('Yetkili kişinin adı soyadı'), findsNothing);
+    expect(find.text('İşletme bilgileri'), findsNothing);
+    expect(find.byType(TextFormField), findsNWidgets(4));
+  });
+
+  testWidgets('business registration identifies the authorized person separately', (tester) async {
+    await tester.pumpWidget(MaterialApp(
+      home: AuthPage(register: true, initialRole: 'business', onDone: (_) {}),
+    ));
+    await tester.pump();
+
+    expect(find.text('Yetkili kişinin adı soyadı'), findsOneWidget);
+    expect(find.text('İşletme / kafe adı'), findsOneWidget);
+    expect(find.text('Ad Soyad'), findsNothing);
+  });
 }
