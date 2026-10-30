@@ -7,6 +7,7 @@ alter table public.cafes
 
 update public.cafes set business_id = owner_id where business_id is null;
 alter table public.cafes alter column business_id set not null;
+alter table public.cafes alter column is_main_branch set default false;
 create index if not exists cafes_business_idx on public.cafes(business_id, is_active);
 
 create table if not exists public.business_employees (
@@ -384,7 +385,7 @@ as $access$
     );
 $access$;
 revoke all on function public.can_access_cafe(uuid) from public;
-grant execute on function public.can_access_cafe(uuid) to authenticated;
+grant execute on function public.can_access_cafe(uuid) to anon, authenticated;
 
 drop policy if exists "memberships_read_business" on public.cafe_memberships;
 create policy "memberships_read_business" on public.cafe_memberships for select to authenticated
