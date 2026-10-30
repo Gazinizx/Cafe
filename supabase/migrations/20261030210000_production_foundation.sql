@@ -8,6 +8,12 @@ alter table public.cafes
 update public.cafes set business_id = owner_id where business_id is null;
 alter table public.cafes alter column business_id set not null;
 alter table public.cafes alter column is_main_branch set default false;
+with ranked_branches as (
+  select id, row_number() over (partition by business_id order by created_at, id) as branch_rank
+  from public.cafes
+)
+update public.cafes c set is_main_branch = (r.branch_rank = 1)
+from ranked_branches r where r.id = c.id;
 create index if not exists cafes_business_idx on public.cafes(business_id, is_active);
 
 create table if not exists public.business_employees (
@@ -156,7 +162,7 @@ with check (exists (select 1 from public.cafes c where c.id = cafe_id and (c.bus
 
 drop policy if exists "reward_claims_read_participant" on public.reward_claims;
 create policy "reward_claims_read_participant" on public.reward_claims for select to authenticated
-using (customer_id = auth.uid() or exists (select 1 from public.cafes c where c.id = cafe_id and public.is_business_member(c.business_id)) or public.is_cafe_admin());
+using (customer_id = auth.uid() or public.can_access_cafe(cafe_id));
 
 drop policy if exists "subscription_packages_read_active" on public.subscription_packages;
 drop policy if exists "subscription_packages_admin_manage" on public.subscription_packages;
