@@ -159,3 +159,15 @@ jobs:
         run: deno test supabase/functions/_shared/ntag424_test.ts
       - name: Type-check NFC Edge Function
         run: deno check supabase/functions/verify-nfc-stamp/index.ts
+      - name: Check web admin JavaScript syntax
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+          html = Path("yonetim/index.html").read_text()
+          match = re.search(r'<script type="module">(.*?)</script>', html, re.S)
+          if not match:
+              raise SystemExit("Admin module script was not found")
+          Path("/tmp/cafe-admin.mjs").write_text(match.group(1))
+          PY
+          node --check /tmp/cafe-admin.mjs
