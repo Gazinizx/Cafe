@@ -146,10 +146,11 @@ Deno.serve(async (request: Request) => {
   const result = Array.isArray(stampData) ? stampData[0] : stampData;
   if (!result) return json(500, { error: "Damga sonucu alınamadı." });
   if (result.duplicate_blocked) {
-    return json(429, {
+    return json(200, {
+      success: false,
       duplicate: true,
       stamps: result.new_stamp_count,
-      error: "Aynı işletmede 10 dakika dolmadan tekrar damga alamazsın.",
+      message: "Aynı işletmede 10 dakika dolmadan tekrar damga alamazsın.",
     });
   }
 
