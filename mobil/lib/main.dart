@@ -465,7 +465,6 @@ class _AuthPageState extends State<AuthPage> {
   final deliveryName = TextEditingController(), deliveryPhone = TextEditingController();
   final deliveryProvince = TextEditingController(), deliveryDistrict = TextEditingController(), deliveryAddress = TextEditingController();
   String role = 'customer';
-  static const int tagCount = 1;
   bool busy = false, hide = true;
 
   @override void initState() { super.initState(); role = widget.initialRole; }
@@ -1773,7 +1772,7 @@ class _AdminOrdersState extends State<AdminOrders> {
         DropdownButtonFormField<String>(
           value: ['İncelemede','Etiket hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].contains(o['orderStatus']) ? o['orderStatus'] : 'İncelemede',
           decoration: const InputDecoration(labelText: 'Sipariş durumu'),
-          items: const ['İncelemede','Onaylandı — ödeme bekliyor','Hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+          items: const ['İncelemede','Etiket hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
           onChanged: (v) { if (v != null) _updateOrder(o, 'orderStatus', v); },
         ),
       ])))),
