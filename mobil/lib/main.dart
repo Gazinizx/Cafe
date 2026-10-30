@@ -845,14 +845,12 @@ class BusinessDashboard extends StatelessWidget{
  const SizedBox(height:16),const Text('Yönetim araçları',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:forest)),
  const Card(child:ListTile(leading:Icon(Icons.campaign,color:forest),title:Text('Kampanya yönetimi'),subtitle:Text('Kampanya oluştur, düzenle ve yayından kaldır.'))),
  const Card(child:ListTile(leading:Icon(Icons.loyalty,color:forest),title:Text('Sadakat programı'),subtitle:Text('Kart ve ödül yapısı sonraki doğrulama adımına hazır taslak olarak ele alınır.'))),
- if (user['approvalStatus'] == 'approved') Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-    const Text('Başvuru onaylandı', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: forest)),
-    const SizedBox(height: 8),
-    const Text('Ödeme yöntemi: IBAN havale / EFT'),
-    const Text('Hesap sahibi: CAFE DÜNYAM (ÖRNEK)'),
-    const SelectableText('IBAN: TR00 0000 0000 0000 0000 0000 00'),
-    const Text('Bu IBAN ve fiyatlar yalnızca test içindir. Gerçek banka bilgisi girilmeden ödeme yapma.'),
-    Text('Sipariş toplamı: ${(user['nfcOrder'] as Map?)?['totalTry'] ?? 0} TL (örnek fiyat)'),
+ if (user['approvalStatus'] == 'approved') const Card(child: Padding(padding: EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text('Başvuru onaylandı', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: forest)),
+    SizedBox(height: 8),
+    Text('Ödemeler şu aşamada nakit veya banka havalesiyle alınır.'),
+    Text('Tahsilat, Cafe Dünyam yöneticisi tarafından doğrulanınca hesabına işlenir.'),
+    Text('Uygulamada çevrim içi kart ödemesi alınmaz; doğrulanmamış IBAN veya ödeme bağlantısı gösterilmez.'),
   ]))),
   const LocalModeNote(),
  ]);
@@ -1110,9 +1108,13 @@ class _AdminUsersState extends State<AdminUsers> {
 
 class AdminOrders extends StatefulWidget { const AdminOrders({super.key}); @override State<AdminOrders> createState()=>_AdminOrdersState(); }
 class _AdminOrdersState extends State<AdminOrders> {
-  Future<void> _setStatus(Map<String,dynamic> order,String status) async {
-    final orders=await LocalData.list(businessOrdersKey,[]); final i=orders.indexWhere((o)=>o['id']==order['id']); if(i<0)return;
-    orders[i]['orderStatus']=status; await LocalData.saveList(businessOrdersKey,orders); if(mounted)setState((){});
+  Future<void> _updateOrder(Map<String,dynamic> order, String key, String value) async {
+    final orders = await LocalData.list(businessOrdersKey, []);
+    final i = orders.indexWhere((o) => o['id'] == order['id']);
+    if (i < 0) return;
+    orders[i][key] = value;
+    await LocalData.saveList(businessOrdersKey, orders);
+    if (mounted) setState(() {});
   }
   @override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(businessOrdersKey,[]),builder:(context,s){
     if(!s.hasData)return const Center(child:CircularProgressIndicator());
@@ -1126,8 +1128,33 @@ class _AdminOrdersState extends State<AdminOrders> {
         Text('Toplam: ${o['totalTry'] ?? 0} TL (örnek)'),
         Text('Teslimat: ${o['recipientName'] ?? ''} • ${o['province'] ?? ''} / ${o['district'] ?? ''}'),
         Text('Adres: ${o['address'] ?? ''}'),
-        Text('Durum: ${o['orderStatus'] ?? 'İncelemede'}'),
-        DropdownButtonFormField<String>(value:['İncelemede','Onaylandı — ödeme bekliyor','Hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].contains(o['orderStatus'])?o['orderStatus']:'İncelemede',decoration:const InputDecoration(labelText:'Sipariş durumu'),items:const ['İncelemede','Onaylandı — ödeme bekliyor','Hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].map((v)=>DropdownMenuItem(value:v,child:Text(v))).toList(),onChanged:(v){if(v!=null)_setStatus(o,v);}),
+        Text('Ödeme yöntemi: ${o['paymentMethod'] ?? 'Belirtilmedi'}'),
+        DropdownButtonFormField<String>(
+          value: ['cash', 'bank_transfer'].contains(o['paymentMethod']) ? o['paymentMethod'] : 'cash',
+          decoration: const InputDecoration(labelText: 'Tahsilat yöntemi'),
+          items: const [
+            DropdownMenuItem(value: 'cash', child: Text('Nakit')),
+            DropdownMenuItem(value: 'bank_transfer', child: Text('Banka havalesi')),
+          ],
+          onChanged: (v) { if (v != null) _updateOrder(o, 'paymentMethod', v); },
+        ),
+        DropdownButtonFormField<String>(
+          value: ['pending', 'confirmed', 'rejected'].contains(o['paymentStatus']) ? o['paymentStatus'] : 'pending',
+          decoration: const InputDecoration(labelText: 'Tahsilat durumu'),
+          items: const [
+            DropdownMenuItem(value: 'pending', child: Text('Ödeme bekliyor')),
+            DropdownMenuItem(value: 'confirmed', child: Text('Tahsilat doğrulandı')),
+            DropdownMenuItem(value: 'rejected', child: Text('Ödeme doğrulanmadı')),
+          ],
+          onChanged: (v) { if (v != null) _updateOrder(o, 'paymentStatus', v); },
+        ),
+        Text('Sipariş durumu: ${o['orderStatus'] ?? 'İncelemede'}'),
+        DropdownButtonFormField<String>(
+          value: ['İncelemede','Onaylandı — ödeme bekliyor','Hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].contains(o['orderStatus']) ? o['orderStatus'] : 'İncelemede',
+          decoration: const InputDecoration(labelText: 'Sipariş durumu'),
+          items: const ['İncelemede','Onaylandı — ödeme bekliyor','Hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+          onChanged: (v) { if (v != null) _updateOrder(o, 'orderStatus', v); },
+        ),
       ])))),
       const LocalModeNote(),
     ]);
