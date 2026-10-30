@@ -181,6 +181,79 @@ with check (business_id = auth.uid() and status = 'pending' and received_by is n
 create policy "manual_payments_admin_manage" on public.manual_payments for all to authenticated
 using (public.is_cafe_admin()) with check (public.is_cafe_admin());
 
+
+-- Restrict NFC metadata reads to safe columns; secret references remain server-only.
+revoke select on public.nfc_tags from anon, authenticated;
+grant select (id, business_id, tag_uid, status, provisioned_at, last_used_at, created_at)
+  on public.nfc_tags to authenticated;
+
+-- New branches must explicitly belong to the signed-in business owner.
+drop policy if exists "cafes_owner_insert" on public.cafes;
+create policy "cafes_owner_insert" on public.cafes for insert to authenticated with check (
+  owner_id = auth.uid() and business_id = auth.uid() and is_active = false
+  and exists (select 1 from public.profiles p where p.id = auth.uid() and p.role = 'business' and p.approval_status = 'approved')
+);
+
+-- Preserve the existing signup workflow while setting business_id for the initial branch.
+create or replace function public.handle_new_user()
+returns trigger language plpgsql security definer set search_path = ''
+as $
+declare requested_role text;
+begin
+  requested_role := coalesce(new.raw_user_meta_data ->> 'role', 'customer');
+  if requested_role not in ('customer','business') then requested_role := 'customer'; end if;
+  insert into public.profiles (id, full_name, email, role, approval_status)
+  values (new.id, coalesce(new.raw_user_meta_data ->> 'full_name',''), new.email, requested_role,
+          case when requested_role = 'business' then 'pending' else 'approved' end);
+
+  if requested_role = 'business' then
+    insert into public.business_applications (
+      business_id, cafe_name, phone, business_type, tax_office, tax_number,
+      province, district, business_address, delivery_name, delivery_phone,
+      delivery_province, delivery_district, delivery_address, tag_count
+    ) values (
+      new.id, coalesce(new.raw_user_meta_data ->> 'cafe_name','İşletme'),
+      new.raw_user_meta_data ->> 'phone', new.raw_user_meta_data ->> 'business_type',
+      new.raw_user_meta_data ->> 'tax_office', new.raw_user_meta_data ->> 'tax_number',
+      new.raw_user_meta_data ->> 'province', new.raw_user_meta_data ->> 'district',
+      new.raw_user_meta_data ->> 'business_address', new.raw_user_meta_data ->> 'delivery_name',
+      new.raw_user_meta_data ->> 'delivery_phone', new.raw_user_meta_data ->> 'delivery_province',
+      new.raw_user_meta_data ->> 'delivery_district', new.raw_user_meta_data ->> 'delivery_address',
+      coalesce(nullif(new.raw_user_meta_data ->> 'tag_count','')::integer, 0)
+    );
+
+    insert into public.cafes (owner_id, business_id, name, city, district, address, category, is_active)
+    values (
+      new.id, new.id, coalesce(new.raw_user_meta_data ->> 'cafe_name','İşletme'),
+      coalesce(new.raw_user_meta_data ->> 'province',''), new.raw_user_meta_data ->> 'district',
+      new.raw_user_meta_data ->> 'business_address', new.raw_user_meta_data ->> 'business_type', false
+    );
+
+    insert into public.business_orders (business_id, order_data, order_status, payment_status)
+    values (
+      new.id,
+      jsonb_build_object(
+        'businessName', coalesce(new.raw_user_meta_data ->> 'cafe_name','İşletme'),
+        'tagCount', coalesce(nullif(new.raw_user_meta_data ->> 'tag_count','')::integer, 0),
+        'packagePriceTry', coalesce(nullif(new.raw_user_meta_data ->> 'package_price_try','')::numeric, 0),
+        'shippingTry', coalesce(nullif(new.raw_user_meta_data ->> 'shipping_try','')::numeric, 0),
+        'totalTry', coalesce(nullif(new.raw_user_meta_data ->> 'order_total_try','')::numeric, 0),
+        'paymentMethod', 'Nakit / banka havalesi (yönetici onaylı)',
+        'paymentStatus', 'Ödeme bekliyor',
+        'orderStatus', 'Başvuru inceleniyor',
+        'recipientName', new.raw_user_meta_data ->> 'delivery_name',
+        'recipientPhone', new.raw_user_meta_data ->> 'delivery_phone',
+        'province', new.raw_user_meta_data ->> 'delivery_province',
+        'district', new.raw_user_meta_data ->> 'delivery_district',
+        'address', new.raw_user_meta_data ->> 'delivery_address',
+        'createdAt', now()
+      ), 'pending', 'pending'
+    );
+  end if;
+  return new;
+end;
+$;
+
 -- Called only by a trusted Edge Function after the NTAG cryptographic proof is verified.
 -- The mobile app must never receive the tag's AES key or direct permission to execute this RPC.
 create or replace function public.issue_verified_stamp(
