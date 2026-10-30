@@ -1397,13 +1397,14 @@ class _AdminShellState extends State<AdminShell> {
   }
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(leading: const Padding(padding: EdgeInsets.all(8), child: CafeLogo(size: 38)), title: const Text('Yönetim Merkezi', style: TextStyle(fontWeight: FontWeight.w900)), actions: [IconButton(tooltip: 'Çıkış yap', onPressed: _logout, icon: const Icon(Icons.logout))]),
-    body: IndexedStack(index: tab, children: const [AdminDashboard(), AdminApplications(), AdminCampaigns(), AdminUsers(), AdminOrders(), AdminSettings()]),
+    body: IndexedStack(index: tab, children: const [AdminDashboard(), AdminApplications(), AdminCampaigns(), AdminUsers(), AdminOrders(), AdminBilling(), AdminSettings()]),
     bottomNavigationBar: NavigationBar(selectedIndex: tab, onDestinationSelected: (i) => setState(() => tab = i), destinations: const [
       NavigationDestination(icon: Icon(Icons.space_dashboard_rounded), label: 'Özet'),
       NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: 'Başvurular'),
       NavigationDestination(icon: Icon(Icons.campaign_outlined), label: 'Kampanyalar'),
       NavigationDestination(icon: Icon(Icons.people_alt_outlined), label: 'Kullanıcılar'),
       NavigationDestination(icon: Icon(Icons.receipt_long_outlined), label: 'Siparişler'),
+      NavigationDestination(icon: Icon(Icons.payments_outlined), label: 'Paket & ödeme'),
       NavigationDestination(icon: Icon(Icons.tune_rounded), label: 'Ayarlar'),
     ]),
   );
@@ -1524,6 +1525,207 @@ class _AdminOrdersState extends State<AdminOrders> {
       const LocalModeNote(),
     ]);
   });
+}
+
+class AdminBilling extends StatefulWidget {
+  const AdminBilling({super.key});
+  @override State<AdminBilling> createState() => _AdminBillingState();
+}
+class _AdminBillingState extends State<AdminBilling> {
+  final _name = TextEditingController();
+  final _description = TextEditingController();
+  final _price = TextEditingController();
+  final _branches = TextEditingController(text: '1');
+  final _employees = TextEditingController(text: '2');
+  String _period = 'monthly';
+  bool _loading = true, _saving = false;
+  List<Map<String,dynamic>> _packages = [];
+  List<Map<String,dynamic>> _payments = [];
+
+  @override void initState() { super.initState(); _load(); }
+  @override void dispose() { _name.dispose(); _description.dispose(); _price.dispose(); _branches.dispose(); _employees.dispose(); super.dispose(); }
+
+  Future<void> _load() async {
+    try {
+      final packageRows = await cloud.from('subscription_packages').select().order('created_at', ascending: false);
+      final paymentRows = await cloud.from('manual_payments')
+        .select('*, profiles(full_name,email), subscription_packages(name,billing_period)')
+        .order('created_at', ascending: false);
+      _packages = (packageRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _payments = (paymentRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket ve tahsilatlar yüklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _addPackage() async {
+    final price = num.tryParse(_price.text.trim().replaceAll(',', '.'));
+    final branches = int.tryParse(_branches.text.trim());
+    final employees = int.tryParse(_employees.text.trim());
+    if (_name.text.trim().isEmpty || price == null || price < 0 || branches == null || branches < 1 || employees == null || employees < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paket adı, geçerli fiyat ve kullanım limitleri gir.')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await cloud.from('subscription_packages').insert({
+        'name': _name.text.trim(),
+        'description': _description.text.trim(),
+        'price_try': price,
+        'billing_period': _period,
+        'branch_limit': branches,
+        'employee_limit': employees,
+        'is_active': true,
+      });
+      _name.clear(); _description.clear(); _price.clear();
+      _branches.text = '1'; _employees.text = '2';
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paket eklendi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket eklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _editPackage(Map<String,dynamic> package) async {
+    final name = TextEditingController(text: package['name']?.toString() ?? '');
+    final description = TextEditingController(text: package['description']?.toString() ?? '');
+    final price = TextEditingController(text: (package['price_try'] as num).toString());
+    final branches = TextEditingController(text: package['branch_limit'].toString());
+    final employees = TextEditingController(text: package['employee_limit'].toString());
+    var period = package['billing_period']?.toString() ?? 'monthly';
+    final saved = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        title: const Text('Paketi düzenle'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: name, decoration: const InputDecoration(labelText: 'Paket adı')),
+          TextField(controller: description, decoration: const InputDecoration(labelText: 'Açıklama')),
+          TextField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fiyat (TL)')),
+          DropdownButtonFormField<String>(
+            value: period,
+            decoration: const InputDecoration(labelText: 'Dönem'),
+            items: const [DropdownMenuItem(value: 'monthly', child: Text('Aylık')), DropdownMenuItem(value: 'yearly', child: Text('Yıllık'))],
+            onChanged: (value) => setDialogState(() => period = value ?? 'monthly'),
+          ),
+          TextField(controller: branches, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Şube limiti')),
+          TextField(controller: employees, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Çalışan limiti')),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () async {
+            final amount = num.tryParse(price.text.trim().replaceAll(',', '.'));
+            final branchLimit = int.tryParse(branches.text.trim());
+            final employeeLimit = int.tryParse(employees.text.trim());
+            if (name.text.trim().isEmpty || amount == null || amount < 0 || branchLimit == null || branchLimit < 1 || employeeLimit == null || employeeLimit < 1) {
+              ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Paket bilgilerini kontrol et.')));
+              return;
+            }
+            try {
+              await cloud.from('subscription_packages').update({
+                'name': name.text.trim(), 'description': description.text.trim(),
+                'price_try': amount, 'billing_period': period,
+                'branch_limit': branchLimit, 'employee_limit': employeeLimit,
+                'updated_at': DateTime.now().toUtc().toIso8601String(),
+              }).eq('id', package['id']);
+              if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+            } catch (error) {
+              if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('Paket güncellenemedi: $error')));
+            }
+          }, child: const Text('Kaydet')),
+        ],
+      ),
+    ));
+    name.dispose(); description.dispose(); price.dispose(); branches.dispose(); employees.dispose();
+    if (saved == true) await _load();
+  }
+
+  Future<void> _togglePackage(Map<String,dynamic> package, bool active) async {
+    try {
+      await cloud.from('subscription_packages').update({'is_active': active, 'updated_at': DateTime.now().toUtc().toIso8601String()}).eq('id', package['id']);
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket durumu değiştirilemedi: $error')));
+    }
+  }
+
+  Future<void> _confirmPayment(String id) async {
+    try {
+      await cloud.rpc('confirm_manual_payment', params: {'p_payment_id': id});
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tahsilat onaylandı ve abonelik etkinleştirildi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tahsilat onaylanamadı: $error')));
+    }
+  }
+
+  Future<void> _rejectPayment(String id) async {
+    try {
+      await cloud.from('manual_payments').update({'status': 'rejected'}).eq('id', id).eq('status', 'pending');
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tahsilat reddedilemedi: $error')));
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return ListView(padding: const EdgeInsets.all(18), children: [
+      const Heading('Paketler ve tahsilatlar', 'Paket fiyatlarını belirle; nakit veya havale tahsilatlarını doğrula.'),
+      const Text('Yeni abonelik paketi', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
+      TextField(controller: _name, decoration: const InputDecoration(labelText: 'Paket adı')),
+      const SizedBox(height: 8),
+      TextField(controller: _description, decoration: const InputDecoration(labelText: 'Açıklama')),
+      const SizedBox(height: 8),
+      TextField(controller: _price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fiyat (TL)')),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        value: _period,
+        decoration: const InputDecoration(labelText: 'Abonelik dönemi'),
+        items: const [DropdownMenuItem(value: 'monthly', child: Text('Aylık')), DropdownMenuItem(value: 'yearly', child: Text('Yıllık'))],
+        onChanged: (value) => setState(() => _period = value ?? 'monthly'),
+      ),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: TextField(controller: _branches, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Şube limiti'))),
+        const SizedBox(width: 10),
+        Expanded(child: TextField(controller: _employees, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Çalışan limiti'))),
+      ]),
+      const SizedBox(height: 10),
+      FilledButton.icon(onPressed: _saving ? null : _addPackage, icon: const Icon(Icons.add), label: Text(_saving ? 'Ekleniyor…' : 'Paketi ekle')),
+      const SizedBox(height: 22),
+      const Text('Mevcut paketler', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
+      if (_packages.isEmpty) const Text('Henüz paket eklenmedi.'),
+      ..._packages.map((p) => Card(child: ListTile(
+        title: Text('${p['name']} • ${(p['price_try'] as num).toStringAsFixed(2)} TL'),
+        subtitle: Text('${p['billing_period'] == 'yearly' ? 'Yıllık' : 'Aylık'} • ${p['branch_limit']} şube • ${p['employee_limit']} çalışan'),
+        trailing: Wrap(mainAxisSize: MainAxisSize.min, crossAxisAlignment: WrapCrossAlignment.center, children: [
+          IconButton(tooltip: 'Düzenle', onPressed: () => _editPackage(p), icon: const Icon(Icons.edit_outlined)),
+          Switch(value: p['is_active'] == true, onChanged: (value) => _togglePackage(p, value)),
+        ]),
+      ))),
+      const SizedBox(height: 24),
+      const Text('Tahsilat talepleri', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
+      if (_payments.isEmpty) const Text('Henüz tahsilat talebi yok.'),
+      ..._payments.map((p) {
+        final business = p['profiles'] is Map ? Map<String,dynamic>.from(p['profiles'] as Map) : <String,dynamic>{};
+        final package = p['subscription_packages'] is Map ? Map<String,dynamic>.from(p['subscription_packages'] as Map) : <String,dynamic>{};
+        final pending = p['status'] == 'pending';
+        return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text((business['full_name'] ?? business['email'] ?? 'İşletme').toString(), style: const TextStyle(fontWeight: FontWeight.w900)),
+          Text('${package['name'] ?? 'Paket'} • ${(p['amount_try'] as num).toStringAsFixed(2)} TL'),
+          Text('${p['payment_method'] == 'cash' ? 'Nakit' : 'Banka havalesi'} • ${p['status'] == 'confirmed' ? 'Onaylandı' : p['status'] == 'rejected' ? 'Reddedildi' : 'Onay bekliyor'}'),
+          if (pending) Row(children: [
+            Expanded(child: OutlinedButton(onPressed: () => _rejectPayment(p['id'].toString()), child: const Text('Reddet'))),
+            const SizedBox(width: 10),
+            Expanded(child: FilledButton(onPressed: () => _confirmPayment(p['id'].toString()), child: const Text('Tahsilatı onayla'))),
+          ]),
+        ])));
+      }),
+    ]);
+  }
 }
 
 class AdminSettings extends StatelessWidget {
