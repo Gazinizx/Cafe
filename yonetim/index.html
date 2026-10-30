@@ -150,7 +150,7 @@ $("packageForm").addEventListener("submit",async e=>{
 $("nfcBusiness").addEventListener("change",updateBranchOptions);
 $("nfcForm").addEventListener("submit",async e=>{
  e.preventDefault();
- const {data,error}=await db.functions.invoke("manage-nfc-tag",{body:{action:"register",businessId:$("nfcBusiness").value,branchId:$("nfcBranch").value,tagUid:$("nfcUid").value.trim(),secretReference:$("nfcSecret").value.trim()}});
+ const {data,error}=await db.functions.invoke("manage-nfc-tag",{body:{action:"register",businessId:$("nfcBusiness").value,branchId:$("nfcBranch").value,tagUid:$("nfcUid").value.trim(),secretReference:$("nfcSecret").value.trim()},headers:{"x-region":"eu-west-3"}});
  if(error){toast(error.message,true);return}if(!data?.success){toast(data?.error||"Etiket kaydedilemedi.",true);return}
  $("nfcUid").value="";$("nfcSecret").value="";toast(data.message||"Etiket bağlandı.");await loadNfc();
 });
@@ -172,7 +172,7 @@ document.addEventListener("click",async e=>{
    const employees=prompt("Çalışan limiti",p.employee_limit);if(employees===null)return;
    const {error}=await db.from("subscription_packages").update({name:name.trim(),price_try:Number(price),billing_period:period,branch_limit:Number(branches),employee_limit:Number(employees),updated_at:new Date().toISOString()}).eq("id",id);if(error)throw error;await loadPackages();
   }
-  if(action==="revoke-tag"){const {data,error}=await db.functions.invoke("manage-nfc-tag",{body:{action:"revoke",tagId:id}});if(error)throw error;if(!data?.success)throw new Error(data?.error||"Etiket iptal edilemedi.");toast("NFC etiketi iptal edildi.");await loadNfc();}
+  if(action==="revoke-tag"){const {data,error}=await db.functions.invoke("manage-nfc-tag",{body:{action:"revoke",tagId:id},headers:{"x-region":"eu-west-3"}});if(error)throw error;if(!data?.success)throw new Error(data?.error||"Etiket iptal edilemedi.");toast("NFC etiketi iptal edildi.");await loadNfc();}
   if(action==="toggle-campaign"){const {error}=await db.from("campaigns").update({is_active:btn.dataset.active==="true"}).eq("id",id);if(error)throw error;await loadCampaigns();}
  }catch(error){toast(error.message||"İşlem tamamlanamadı.",true)}
 });
