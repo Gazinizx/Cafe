@@ -1357,17 +1357,164 @@ class _BusinessDealsState extends State<BusinessDeals> {
   ]);
 }
 
-class BusinessSettings extends StatelessWidget{
- final Map<String,dynamic> user;const BusinessSettings({required this.user,super.key});
- @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
- const Heading('İşletmem','İşletme bilgileri ve yerel ayarlar.'),
- Card(child:ListTile(leading:const Icon(Icons.store,color:forest),title:Text('${user['cafeName']}'),subtitle:Text('${user['city']}'))),
- Card(child:ListTile(leading:const Icon(Icons.email,color:forest),title:Text('${user['email']}'),subtitle:const Text('Hesap e-postası'))),
-  Card(child:ListTile(leading:const Icon(Icons.phone,color:forest),title:Text('${user['phone'] ?? 'Telefon girilmedi'}'),subtitle:const Text('İşletme telefonu'))),
-  Card(child:ListTile(leading:const Icon(Icons.location_on,color:forest),title:Text('${user['businessAddress'] ?? 'Adres girilmedi'}'),subtitle:Text('${user['district'] ?? ''} / ${user['province'] ?? ''}'))),
- const LocalModeNote(),
- const Text('Önemli: Bu ekranlar test için çalışır. İşletme sahipliği doğrulaması, gerçek satış onayı, sunucu, cihazlar arası eşitleme ve güvenli kullanıcı yetkilendirmesi bu yerel sürümde bulunmaz.'),
- ]);
+class BusinessSettings extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const BusinessSettings({required this.user, super.key});
+  @override State<BusinessSettings> createState() => _BusinessSettingsState();
+}
+class _BusinessSettingsState extends State<BusinessSettings> {
+  final _branchName = TextEditingController();
+  final _branchCity = TextEditingController();
+  final _branchDistrict = TextEditingController();
+  final _branchAddress = TextEditingController();
+  final _employeeEmail = TextEditingController();
+  List<Map<String,dynamic>> _branches = [];
+  List<Map<String,dynamic>> _employees = [];
+  String? _selectedBranchId;
+  bool _loading = true, _savingBranch = false, _savingEmployee = false;
+
+  @override void initState() { super.initState(); _load(); }
+  @override void dispose() {
+    _branchName.dispose(); _branchCity.dispose(); _branchDistrict.dispose();
+    _branchAddress.dispose(); _employeeEmail.dispose(); super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final businessId = widget.user['id'].toString();
+      final branches = await cloud.from('cafes').select().eq('business_id', businessId)
+        .order('is_main_branch', ascending: false).order('created_at', ascending: true);
+      final employees = await cloud.from('business_employees').select()
+        .eq('business_id', businessId).order('created_at', ascending: false);
+      _branches = (branches as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _employees = (employees as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      if (_selectedBranchId == null || !_branches.any((b) => b['id'].toString() == _selectedBranchId)) {
+        _selectedBranchId = _branches.isEmpty ? null : _branches.first['id'].toString();
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Şube ve çalışan bilgileri yüklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _addBranch() async {
+    if (_branchName.text.trim().isEmpty || _branchCity.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şube adı ve şehir gerekli.')));
+      return;
+    }
+    setState(() => _savingBranch = true);
+    try {
+      await cloud.from('cafes').insert({
+        'owner_id': widget.user['id'],
+        'business_id': widget.user['id'],
+        'name': _branchName.text.trim(),
+        'city': _branchCity.text.trim(),
+        'district': _branchDistrict.text.trim(),
+        'address': _branchAddress.text.trim(),
+        'category': widget.user['businessType'] ?? 'Kafe',
+        'is_active': true,
+        'is_main_branch': false,
+      });
+      _branchName.clear(); _branchCity.clear(); _branchDistrict.clear(); _branchAddress.clear();
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yeni şube eklendi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Şube eklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _savingBranch = false);
+    }
+  }
+
+  Future<void> _addEmployee() async {
+    final email = _employeeEmail.text.trim();
+    if (email.isEmpty || _selectedBranchId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Çalışan e-postası ve şube seçmelisin.')));
+      return;
+    }
+    setState(() => _savingEmployee = true);
+    try {
+      final response = await cloud.functions.invoke('find-business-employee', body: {'email': email});
+      final data = response.data;
+      if (response.status != 200 || data is! Map || data['employeeId'] == null) {
+        throw StateError(data is Map ? (data['error'] ?? 'Çalışan bulunamadı.').toString() : 'Çalışan bulunamadı.');
+      }
+      await cloud.from('business_employees').insert({
+        'business_id': widget.user['id'],
+        'employee_id': data['employeeId'],
+        'branch_id': _selectedBranchId,
+        'display_name': data['displayName'] ?? email,
+        'is_active': true,
+      });
+      _employeeEmail.clear();
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Çalışan eklendi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Çalışan eklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _savingEmployee = false);
+    }
+  }
+
+  Future<void> _deactivateEmployee(String id) async {
+    try {
+      await cloud.from('business_employees').update({'is_active': false}).eq('id', id);
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Çalışan kaldırılamadı: $error')));
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return ListView(padding: const EdgeInsets.all(20), children: [
+      const Heading('İşletmem', 'İşletme bilgileri, şubeler ve çalışanlar.'),
+      Card(child: ListTile(leading: const Icon(Icons.store, color: forest), title: Text('${widget.user['cafeName']}'), subtitle: Text('${widget.user['city']}'))),
+      Card(child: ListTile(leading: const Icon(Icons.email, color: forest), title: Text('${widget.user['email']}'), subtitle: const Text('Hesap e-postası'))),
+      Card(child: ListTile(leading: const Icon(Icons.phone, color: forest), title: Text('${widget.user['phone'] ?? 'Telefon girilmedi'}'), subtitle: const Text('İşletme telefonu'))),
+      Card(child: ListTile(leading: const Icon(Icons.location_on, color: forest), title: Text('${widget.user['businessAddress'] ?? 'Adres girilmedi'}'), subtitle: Text('${widget.user['district'] ?? ''} / ${widget.user['province'] ?? ''}'))),
+      const SizedBox(height: 20),
+      const Text('Şube yönetimi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      ..._branches.map((branch) => Card(child: ListTile(
+        leading: Icon(branch['is_main_branch'] == true ? Icons.home_work : Icons.storefront, color: forest),
+        title: Text(branch['name'].toString()),
+        subtitle: Text('${branch['city'] ?? ''} • ${branch['is_active'] == true ? 'Aktif' : 'Pasif'}${branch['is_main_branch'] == true ? ' • Ana şube' : ''}'),
+      ))),
+      const SizedBox(height: 8),
+      TextField(controller: _branchName, decoration: const InputDecoration(labelText: 'Yeni şube adı')),
+      const SizedBox(height: 8),
+      TextField(controller: _branchCity, decoration: const InputDecoration(labelText: 'Şehir')),
+      const SizedBox(height: 8),
+      TextField(controller: _branchDistrict, decoration: const InputDecoration(labelText: 'İlçe')),
+      const SizedBox(height: 8),
+      TextField(controller: _branchAddress, decoration: const InputDecoration(labelText: 'Adres')),
+      const SizedBox(height: 10),
+      FilledButton.icon(onPressed: _savingBranch ? null : _addBranch, icon: const Icon(Icons.add_business), label: Text(_savingBranch ? 'Ekleniyor…' : 'Şube ekle')),
+      const SizedBox(height: 24),
+      const Text('Çalışan yönetimi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      if (_branches.isNotEmpty) DropdownButtonFormField<String>(
+        value: _selectedBranchId,
+        decoration: const InputDecoration(labelText: 'Çalışanın bağlı olacağı şube'),
+        items: _branches.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name'].toString()))).toList(),
+        onChanged: (value) => setState(() => _selectedBranchId = value),
+      ),
+      const SizedBox(height: 8),
+      TextField(controller: _employeeEmail, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Çalışan hesap e-postası')),
+      const SizedBox(height: 10),
+      FilledButton.icon(onPressed: _savingEmployee || _branches.isEmpty ? null : _addEmployee, icon: const Icon(Icons.person_add_alt_1), label: Text(_savingEmployee ? 'Ekleniyor…' : 'Çalışan ekle')),
+      const Text('Çalışan önce Cafe Dünyam müşteri hesabı oluşturmalıdır. Şube ve çalışan limitleri seçili abonelik paketine göre uygulanır.', style: TextStyle(fontSize: 12)),
+      ..._employees.where((e) => e['is_active'] == true).map((employee) {
+        final branch = _branches.where((b) => b['id'] == employee['branch_id']).toList();
+        return Card(child: ListTile(
+          leading: const Icon(Icons.person_outline, color: forest),
+          title: Text((employee['display_name'] ?? 'Çalışan').toString()),
+          subtitle: Text(branch.isEmpty ? 'Tüm şubeler' : branch.first['name'].toString()),
+          trailing: IconButton(tooltip: 'Çalışanı kaldır', onPressed: () => _deactivateEmployee(employee['id'].toString()), icon: const Icon(Icons.person_remove_alt_1)),
+        ));
+      }),
+      const LocalModeNote(),
+    ]);
+  }
 }
 
 class BusinessReviewPage extends StatelessWidget {
