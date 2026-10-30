@@ -3,7 +3,7 @@
 Flutter tabanlı Android ve iOS uygulaması.
 
 - `mobil/`: müşteri ve işletme akışları olan Flutter uygulaması.
-- `yonetim/index.html`: tarayıcı içinde çalışan yerel örnek yönetim paneli.
+- `yonetim/index.html`: Supabase Auth ile giriş yapılan web yönetim paneli.
 - `.github/workflows/android-apk.yml`: Android release APK derlemesi ve artifact çıktısı.
 - `.github/workflows/cross-platform.yml`: Android analiz/testleri ve iOS simülatör analiz/test/derlemesi.
 - `supabase/schema.sql` ve `supabase/migrations/`: Supabase tabloları ve RLS politikaları. Üretim temeli migration'ı şube/çalışan, NFC kayıt defteri, ödül, paket/abonelik ve manuel tahsilat tablolarını ekler.
