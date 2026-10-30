@@ -7,6 +7,8 @@ Flutter uygulamasında Supabase Auth ve bulut veri erişimi eklendi. Kafeler, ka
 2. Proje URL ve publishable key bilgilerini not et. Şema uygulamasını aşağıdaki 2. bölümdeki migration sırasına göre yap.
 3. Project Settings → API bölümündeki Project URL ve publishable key'in uygulamadaki değerlerle eşleştiğini kontrol et. **service_role key'i mobil uygulamaya veya depoya koyma.**
 
+Not: Bu proje `eu-west-3` (Paris) bölgesindedir. Supabase'in yayımladığı güncel bölgeler listesinde Türkiye bölgesi bulunmuyor; bu yüzden mevcut veritabanını korudum ve veritabanı işlemi yapan Edge Function çağrılarını aynı bölgeye yönlendirdim.
+
 ## 2. Şemaları uygulama
 
 Canlı veritabanı açıldıktan sonra migration'ları sırayla uygula:
