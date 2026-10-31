@@ -1109,7 +1109,6 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
 
   @override Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
-    if (_loadError != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text('Paket ve ödeme bilgileri yüklenemedi: $_loadError'), const SizedBox(height: 12), FilledButton(onPressed: () { setState(() => _loading = true); _load(); }, child: const Text('Tekrar dene'))])));
     return ListView(padding: const EdgeInsets.all(20), children: [
       const Heading('Sadakat ödülü', 'Müşterinin kaç damgada hangi ödülü kazanacağını belirle.'),
       DropdownButtonFormField<String>(
@@ -1229,6 +1228,7 @@ class _BusinessBillingState extends State<BusinessBilling> {
 
   @override Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loadError != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text('Paket ve ödeme bilgileri yüklenemedi: $_loadError'), const SizedBox(height: 12), FilledButton(onPressed: () { setState(() => _loading = true); _load(); }, child: const Text('Tekrar dene'))])));
     return ListView(padding: const EdgeInsets.all(20), children: [
       const Heading('Paket ve ödeme', 'Paket seç; ödemeyi nakit veya banka havalesiyle yap.'),
       if (_packages.isEmpty) const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('Henüz satışa açık paket bulunmuyor. Cafe Dünyam yöneticisi paket eklediğinde burada görünecek.'))),
