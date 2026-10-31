@@ -1,4 +1,5 @@
--- Allow approved Cafe Dünyam administrators to create campaigns for any active branch.
+-- Allow approved Cafe Dunyam administrators to create campaigns for any active branch.
+drop policy if exists campaigns_admin_insert on public.campaigns;
 create policy campaigns_admin_insert
 on public.campaigns
 for insert
