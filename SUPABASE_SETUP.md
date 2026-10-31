@@ -11,7 +11,7 @@ Not: Bu proje `eu-west-3` (Paris) bölgesindedir. Supabase'in yayımladığı g�
 
 ## 2. Şemaları uygulama
 
-Önemli: Mevcut `phsmojbrbszobpyeeipc` Cafe Dünyam projesinde migration'lar zaten uygulanmıştır. Supabase migration geçmişinde 20 kayıt bulunuyor; 15 adet `public` tablonun tamamı mevcut ve RLS etkin. **Bu mevcut projede aşağıdaki SQL dosyalarını yeniden çalıştırma.** Aşağıdaki liste depodaki kaynak dosyaların sırasını gösterir. Canlı veritabanındaki ilk üç tarihli bootstrap kaydı (`cafe_dunyam_initial_schema`, `restrict_internal_function_execution`, `restore_policy_helper_permissions`) depodaki migration dosyalarıyla birebir aynı dosya adlarına sahip değildir; bu nedenle bu liste tek başına yeni bir Supabase projesini sıfırdan kurmak için kullanılmamalıdır. Yeni proje kurulumu gerekirse önce bu tarihsel bootstrap SQL'leri de kaynak koda eklenip temiz kurulum testi yapılmalıdır.
+Önemli: Mevcut `phsmojbrbszobpyeeipc` Cafe Dünyam projesinde migration'lar zaten uygulanmıştır. Supabase migration geçmişinde 24 kayıt bulunuyor; 15 adet `public` tablonun tamamı mevcut ve RLS etkin. **Bu mevcut projede aşağıdaki SQL dosyalarını yeniden çalıştırma.** Aşağıdaki liste depodaki kaynak dosyaların sırasını gösterir. Canlı veritabanındaki ilk üç tarihli bootstrap kaydı (`cafe_dunyam_initial_schema`, `restrict_internal_function_execution`, `restore_policy_helper_permissions`) depodaki migration dosyalarıyla birebir aynı dosya adlarına sahip değildir; bu nedenle bu liste tek başına yeni bir Supabase projesini sıfırdan kurmak için kullanılmamalıdır. Yeni proje kurulumu gerekirse önce bu tarihsel bootstrap SQL'leri de kaynak koda eklenip temiz kurulum testi yapılmalıdır. Canlı veritabanında `20261031000000_admin_campaign_insert` sürümü migration tablosuna işlenmemiştir; son dört yeni migration ise canlı geçmişte kayıtlıdır. Bu tarihsel fark giderilmeden bu projeye `supabase db push` çalıştırılmamalıdır.
 1. `supabase/migrations/20261014000000_initial_schema.sql`
 2. `supabase/migrations/20261030210000_production_foundation.sql`
 3. `supabase/migrations/20261030214000_security_hardening.sql`
@@ -30,6 +30,11 @@ Not: Bu proje `eu-west-3` (Paris) bölgesindedir. Supabase'in yayımladığı g�
 16. `supabase/migrations/20261030243000_rls_policy_consolidation.sql`
 17. `supabase/migrations/20261030244000_single_tag_delivery_order.sql`
 18. `supabase/migrations/20261030245000_customer_profile_phone.sql`
+19. `supabase/migrations/20261031000000_admin_campaign_insert.sql` (canlıya daha önce doğrudan uygulanmış; migration geçmişine ayrıca kaydedilmemiş)
+20. `supabase/migrations/20261031085012_atomic_admin_user_deletion_and_campaign_insert_policy.sql`
+21. `supabase/migrations/20261031085152_atomic_business_application_status.sql`
+22. `supabase/migrations/20261031085515_use_invoker_for_business_status_rpc.sql`
+23. `supabase/migrations/20261031085902_delete_profile_before_auth_user.sql`
 
 Son migration müşteri ve işletme kayıtlarında gelen telefon numarasını `profiles.phone` alanına kaydeder ve mevcut Auth metadata verisinden boş profil telefonlarını tamamlar. İkinci migration mevcut kafeleri ilk şubeleri olarak korur; işletme çalışanları, tekil işletme NFC etiketi kaydı, ödül hedefleri, paketler, abonelik kayıtları ve nakit/havale tahsilat kayıtlarını ekler. Üçüncü ve dördüncü migration'lar RLS yetkilerini daraltır, şube/çalışan erişimini düzeltir ve indeksleri ekler. Sonraki migration'lar NFC sayaç tekrar korumasını, ödül teslimini, özel erişim yardımcısını, nakit/havale abonelik tahsilatını ve paket şube/çalışan limitlerini ekler. NTAG doğrulaması yapan `verify-nfc-stamp` Edge Function dağıtıldı ve JWT zorunlu. Gerçek etiketle test etmeden damga üretimini canlıya açma.
 
@@ -68,7 +73,10 @@ Mobil uygulama e-posta doğrulamasından sonra şu özel bağlantıya döner:
 
 Android ve iOS derleme iş akışları bu URL şemasını otomatik olarak uygulama paketine ekler. Supabase tarafındaki izin listesi eklenmeden e-posta bağlantısı uygulamaya dönemeyebilir.
 
-## 6. GitHub bağlantısı (bir kez senin hesabından)
+## 6. Auth parola güvenliği
+Security Advisor, sızdırılmış parola korumasının kapalı olduğunu bildiriyor. Supabase Dashboard → Authentication → Sign In / Providers → Email bölümünde **Leaked password protection** seçeneğini etkinleştir. Supabase dokümantasyonuna göre bu özellik Pro ve üzeri planlarda kullanılabilir; mevcut plan desteklemiyorsa bu uyarı panelden yükseltme yapılmadan kapatılamaz.
+
+## 7. GitHub bağlantısı (bir kez senin hesabından)
 Bu depo Supabase CLI yapısına hazırlandı: `supabase/config.toml` ve `supabase/migrations/` klasörü mevcut. Depo kökünde `supabase/` klasörü bulunduğu için çalışma dizini `.` olmalı.
 
 1. [Supabase Dashboard](https://supabase.com/dashboard) üzerinden kendi hesabınla giriş yap ve mevcut Cafe Dünyam projesini aç.
@@ -82,7 +90,7 @@ GitHub yetkilendirmesi, Supabase projesi oluşturma ve hesap onayı kullanıcı 
 ## Web yönetim paneli
 `yonetim/index.html` artık yerel tarayıcı hafızası yerine Supabase Auth ve RLS ile çalışır. Yönetici hesabıyla giriş yapıldığında işletme başvuruları, paketler, nakit/havale tahsilatları, NFC etiketleri ve kampanyalar yönetilebilir. Statik dosya olarak GitHub Pages veya başka bir statik barındırma hizmetine yayınlanabilir.
 
-## 6. Yayına çıkmadan önce
+## 8. Yayına çıkmadan önce
 - SQL şemasının gerçekten uygulandığını ve yeni bir müşteri/işletme hesabıyla tabloların oluştuğunu doğrula.
 - Gerçek NTAG 424 DNA etiketi, AES anahtarı ve Edge Function secret ayarlanmadan NFC damgası üretme; doğrudan istemci yazma izni verme.
 - Yönetim işlemlerini yalnızca `admin` rolüne sahip hesapla yap; kullanıcı rolü istemci metadata'sından alınmaz.
