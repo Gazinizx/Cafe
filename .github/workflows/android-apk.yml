@@ -53,8 +53,12 @@ jobs:
           import re
           p = Path("android/app/src/main/AndroidManifest.xml")
           s = p.read_text()
+          if "android.permission.INTERNET" not in s:
+              s = s.replace("<application", '    <uses-permission android:name="android.permission.INTERNET" />\n    <application', 1)
           if "android.permission.NFC" not in s:
               s = s.replace("<application", '    <uses-permission android:name="android.permission.NFC" />\n    <application', 1)
+          if "android.permission.INTERNET" not in s:
+              raise SystemExit("Android release manifest is missing INTERNET permission")
           if "android.hardware.nfc" not in s:
               s = s.replace("<application", '    <uses-feature android:name="android.hardware.nfc" android:required="false" />\n    <application', 1)
           s = re.sub(r'android:label="[^"]+"', 'android:label="Cafe Dünyam"', s, count=1)
