@@ -1723,7 +1723,7 @@ class _AdminShellState extends State<AdminShell> {
   }
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(leading: const Padding(padding: EdgeInsets.all(8), child: CafeLogo(size: 38)), title: const Text('Yönetim Merkezi', style: TextStyle(fontWeight: FontWeight.w900)), actions: [IconButton(tooltip: 'Çıkış yap', onPressed: _logout, icon: const Icon(Icons.logout))]),
-    body: IndexedStack(index: tab, children: const [AdminDashboard(), AdminApplications(), AdminCampaigns(), AdminUsers(), AdminOrders(), AdminBilling(), AdminSettings()]),
+    body: IndexedStack(index: tab, children: [AdminDashboard(onNavigate: (index) => setState(() => tab = index)), const AdminApplications(), const AdminCampaigns(), const AdminUsers(), const AdminOrders(), const AdminBilling(), const AdminSettings()]),
     bottomNavigationBar: NavigationBar(selectedIndex: tab, onDestinationSelected: (i) => setState(() => tab = i), destinations: const [
       NavigationDestination(icon: Icon(Icons.space_dashboard_rounded), label: 'Özet'),
       NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: 'Başvurular'),
@@ -1737,10 +1737,12 @@ class _AdminShellState extends State<AdminShell> {
 }
 
 class AdminDashboard extends StatelessWidget {
-  const AdminDashboard({super.key});
+  final ValueChanged<int> onNavigate;
+  const AdminDashboard({required this.onNavigate, super.key});
   @override Widget build(BuildContext context) => FutureBuilder<List<dynamic>>(
     future: Future.wait([LocalData.list(usersKey, []), LocalData.list(dealsKey, starterDeals), LocalData.list(businessOrdersKey, [])]),
     builder: (context, s) {
+      if (s.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Yönetim özeti yüklenemedi: ${s.error}')));
       if (!s.hasData) return const Center(child: CircularProgressIndicator());
       final users = s.data![0] as List<Map<String,dynamic>>;
       final deals = s.data![1] as List<Map<String,dynamic>>;
@@ -1760,8 +1762,8 @@ class AdminDashboard extends StatelessWidget {
         Row(children: [metric('Aktif kampanya', active, Icons.campaign, brown), const SizedBox(width: 8), metric('Sipariş talebi', orders.length, Icons.receipt_long, forest)]),
         const SizedBox(height: 12),
         const Heading('Yönetim kısayolları', 'Sık kullanılan işlemlere hızlı erişim.'),
-        Card(child: ListTile(leading: const Icon(Icons.fact_check, color: brown), title: const Text('Başvuruları incele'), subtitle: Text('$pending başvuru inceleme bekliyor'), trailing: const Icon(Icons.chevron_right), onTap: () {})),
-        Card(child: ListTile(leading: const Icon(Icons.campaign, color: brown), title: const Text('Kampanya denetimi'), subtitle: Text('$active aktif kampanya'), trailing: const Icon(Icons.chevron_right))),
+        Card(child: ListTile(leading: const Icon(Icons.fact_check, color: brown), title: const Text('Başvuruları incele'), subtitle: Text('$pending başvuru inceleme bekliyor'), trailing: const Icon(Icons.chevron_right), onTap: () => onNavigate(1))),
+        Card(child: ListTile(leading: const Icon(Icons.campaign, color: brown), title: const Text('Kampanya denetimi'), subtitle: Text('$active aktif kampanya'), trailing: const Icon(Icons.chevron_right), onTap: () => onNavigate(2))),
         const LocalModeNote(),
       ]);
     },
@@ -1771,7 +1773,7 @@ class AdminDashboard extends StatelessWidget {
 class AdminUsers extends StatefulWidget { const AdminUsers({super.key}); @override State<AdminUsers> createState()=>_AdminUsersState(); }
 class _AdminUsersState extends State<AdminUsers> {
   Future<void> _remove(Map<String,dynamic> u) async {
-    final ok = await showDialog<bool>(context: context, builder: (c)=>AlertDialog(title: const Text('Kullanıcıyı sil?'), content: Text('${u['email']} hesabı bu cihazdan kaldırılacak.'), actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Vazgeç')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('Sil'))]));
+    final ok = await showDialog<bool>(context: context, builder: (c)=>AlertDialog(title: const Text('Kullanıcıyı sil?'), content: Text('${u['email']} hesabı ve ona bağlı işletme/müşteri kayıtları sistemden kalıcı olarak silinecek. Bu işlem geri alınamaz.'), actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Vazgeç')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('Sil'))]));
     if (ok != true || u['role'] == 'admin') return;
     if (cloud.auth.currentSession != null && LocalData._uuid(u['id']?.toString())) {
       try {
@@ -1789,10 +1791,11 @@ class _AdminUsersState extends State<AdminUsers> {
     if (mounted) setState(() {});
   }
   @override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(usersKey, []),builder:(context,s){
+    if(s.hasError)return Center(child:Padding(padding:const EdgeInsets.all(24),child:Text('Kullanıcılar yüklenemedi: ${s.error}')));
     if(!s.hasData)return const Center(child:CircularProgressIndicator());
     final users=s.data!;
     return ListView(padding:const EdgeInsets.all(18),children:[
-      Heading('Kullanıcı yönetimi','Yerel cihazda kayıtlı müşteri ve işletme hesapları.'),
+      Heading('Kullanıcı yönetimi','Bulut sistemindeki müşteri, çalışan ve işletme hesapları.'),
       Card(child:ListTile(leading:const Icon(Icons.people,color:brown),title:Text('${users.length} hesap'),subtitle:const Text('Yönetici hesabı silinemez.'))),
       ...users.map((u)=>Card(child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFF0E1CF),child:Icon(u['role']=='business'?Icons.storefront:u['role']=='admin'?Icons.admin_panel_settings:Icons.person,color:forest)),title:Text('${u['cafeName'] ?? u['name'] ?? 'Kullanıcı'}'),subtitle:Text('${u['email']}\nRol: ${u['role']} • Durum: ${u['approvalStatus'] ?? 'Aktif'}'),isThreeLine:true,trailing:u['role']=='admin'?null:IconButton(tooltip:'Hesabı sil',onPressed:()=>_remove(u),icon:const Icon(Icons.delete_outline,color:Colors.red))))),
       const LocalModeNote(),
@@ -1811,6 +1814,7 @@ class _AdminOrdersState extends State<AdminOrders> {
     if (mounted) setState(() {});
   }
   @override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(businessOrdersKey,[]),builder:(context,s){
+    if(s.hasError)return Center(child:Padding(padding:const EdgeInsets.all(24),child:Text('Siparişler yüklenemedi: ${s.error}')));
     if(!s.hasData)return const Center(child:CircularProgressIndicator());
     final orders=s.data!;
     return ListView(padding:const EdgeInsets.all(18),children:[
@@ -2143,6 +2147,11 @@ class AdminApplications extends StatefulWidget {
 }
 class _AdminApplicationsState extends State<AdminApplications> {
   Future<void> _setStatus(Map<String,dynamic> target, String status) async {
+    if (cloud.auth.currentSession != null && LocalData._uuid(target['id']?.toString())) {
+      await cloud.rpc('set_business_application_status', params: {'p_business_id': target['id'], 'p_status': status});
+      if (mounted) setState(() {});
+      return;
+    }
     final users = await LocalData.list(usersKey, []);
     final i = users.indexWhere((u) => u['email'] == target['email']);
     if (i < 0) return;
@@ -2160,6 +2169,7 @@ class _AdminApplicationsState extends State<AdminApplications> {
   @override Widget build(BuildContext context) => FutureBuilder<List<Map<String,dynamic>>>(
     future: LocalData.list(usersKey, []),
     builder: (context, s) {
+      if (s.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Başvurular yüklenemedi: ${s.error}')));
       if (!s.hasData) return const Center(child: CircularProgressIndicator());
       final pending = s.data!.where((u) => u['role'] == 'business' && u['approvalStatus'] != 'approved' && u['approvalStatus'] != 'rejected').toList();
       final rejected = s.data!.where((u) => u['role'] == 'business' && u['approvalStatus'] == 'rejected').toList();
@@ -2287,6 +2297,7 @@ class _AdminCampaignsState extends State<AdminCampaigns> {
   @override Widget build(BuildContext context) => FutureBuilder<List<Map<String,dynamic>>>(
     future: LocalData.list(dealsKey, starterDeals),
     builder: (context, s) {
+      if (s.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Kampanyalar yüklenemedi: ${s.error}')));
       if (!s.hasData) return const Center(child: CircularProgressIndicator());
       return ListView(padding: const EdgeInsets.all(18), children: [
         const Heading('Tüm kampanyalar', 'Yönetici tüm işletmelerin kampanyalarını düzenleyebilir.'),
