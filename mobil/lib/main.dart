@@ -1860,7 +1860,7 @@ class _AdminBillingState extends State<AdminBilling> {
     try {
       final packageRows = await cloud.from('subscription_packages').select().order('created_at', ascending: false);
       final paymentRows = await cloud.from('manual_payments')
-        .select('*, profiles(full_name,email), subscription_packages(name,billing_period)')
+        .select('*, profiles!manual_payments_business_id_fkey(full_name,email), subscription_packages(name,billing_period)')
         .order('created_at', ascending: false);
       final businessRows = await cloud.from('profiles').select('id,full_name,email')
         .eq('role', 'business').eq('approval_status', 'approved').order('full_name');
@@ -2191,6 +2191,70 @@ class AdminCampaigns extends StatefulWidget {
   @override State<AdminCampaigns> createState() => _AdminCampaignsState();
 }
 class _AdminCampaignsState extends State<AdminCampaigns> {
+  Future<void> _addCampaign() async {
+    final cafes = await cloud.from('cafes').select('id,name').eq('is_active', true).order('name');
+    if (!mounted) return;
+    if ((cafes as List).isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kampanya eklemek için önce aktif bir şube oluşturulmalı.')));
+      return;
+    }
+    final title = TextEditingController();
+    final benefit = TextEditingController();
+    String? cafeId = cafes.first['id'].toString();
+    String audience = 'Herkes';
+    final saved = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, refresh) => AlertDialog(
+        title: const Text('Yeni kampanya oluştur'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            value: cafeId,
+            decoration: const InputDecoration(labelText: 'Yayınlanacak şube'),
+            items: cafes.map((raw) => DropdownMenuItem<String>(value: raw['id'].toString(), child: Text(raw['name'].toString()))).toList(),
+            onChanged: (value) => refresh(() => cafeId = value),
+          ),
+          TextField(controller: title, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
+          TextField(controller: benefit, decoration: const InputDecoration(labelText: 'İndirim / avantaj açıklaması')),
+          DropdownButtonFormField<String>(
+            value: audience,
+            decoration: const InputDecoration(labelText: 'Hedef kitle'),
+            items: const [
+              DropdownMenuItem(value: 'Herkes', child: Text('Herkes')),
+              DropdownMenuItem(value: 'Öğrenci', child: Text('Öğrenci')),
+              DropdownMenuItem(value: 'Yeni müşteriler', child: Text('Yeni müşteriler')),
+            ],
+            onChanged: (value) => refresh(() => audience = value ?? 'Herkes'),
+          ),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Oluştur')),
+        ],
+      ),
+    ));
+    try {
+      if (saved == true) {
+        if (cafeId == null || title.text.trim().isEmpty || benefit.text.trim().isEmpty) {
+          throw StateError('Şube, kampanya başlığı ve avantaj açıklaması zorunludur.');
+        }
+        await cloud.from('campaigns').insert({
+          'cafe_id': cafeId,
+          'title': title.text.trim(),
+          'benefit': benefit.text.trim(),
+          'audience': audience,
+          'is_active': true,
+        });
+        if (mounted) {
+          setState(() {});
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kampanya oluşturuldu.')));
+        }
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kampanya oluşturulamadı: $error')));
+    } finally {
+      title.dispose();
+      benefit.dispose();
+    }
+  }
   Future<void> _toggle(Map<String,dynamic> d) async {
     final deals = await LocalData.list(dealsKey, starterDeals);
     final i = deals.indexWhere((x) => x['id'] == d['id']);
@@ -2226,6 +2290,12 @@ class _AdminCampaignsState extends State<AdminCampaigns> {
       if (!s.hasData) return const Center(child: CircularProgressIndicator());
       return ListView(padding: const EdgeInsets.all(18), children: [
         const Heading('Tüm kampanyalar', 'Yönetici tüm işletmelerin kampanyalarını düzenleyebilir.'),
+        Align(alignment: Alignment.centerRight, child: FilledButton.icon(
+          onPressed: _addCampaign,
+          icon: const Icon(Icons.add),
+          label: const Text('Kampanya ekle'),
+        )),
+        const SizedBox(height: 10),
         ...s.data!.map((d) => Card(child: ListTile(
           title: Text('${d['title']}'),
           subtitle: Text('${d['benefit']} • Sahip: ${d['ownerName'] ?? d['ownerEmail'] ?? d['cafeId'] ?? 'Belirtilmemiş'}'),
