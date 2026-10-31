@@ -58,6 +58,19 @@ jobs:
                   )
           if "android.permission.INTERNET" not in s:
               raise SystemExit("Android manifest is missing INTERNET permission")
+          if 'android:scheme="com.cafedunyam.app"' not in s:
+              start = s.find("<activity")
+              end = s.find("</activity>", start)
+              if start < 0 or end < 0:
+                  raise SystemExit("MainActivity declaration was not found for auth deep link")
+              intent_filter = """              <intent-filter>
+                  <action android:name="android.intent.action.VIEW" />
+                  <category android:name="android.intent.category.DEFAULT" />
+                  <category android:name="android.intent.category.BROWSABLE" />
+                  <data android:scheme="com.cafedunyam.app" android:host="login-callback" />
+              </intent-filter>
+          """
+              s = s[:end] + intent_filter + s[end:]
           p.write_text(s)
           PY
       - name: Install dependencies
@@ -111,6 +124,13 @@ jobs:
               info = plistlib.load(f)
           info["CFBundleDisplayName"] = "Cafe Dünyam"
           info["NFCReaderUsageDescription"] = "Cafe Dünyam sadakat damgası kazanmak için işletmenin NFC etiketini okur."
+          url_types = info.get("CFBundleURLTypes", [])
+          if not any("com.cafedunyam.app" in item.get("CFBundleURLSchemes", []) for item in url_types):
+              url_types.append({
+                  "CFBundleTypeRole": "Editor",
+                  "CFBundleURLSchemes": ["com.cafedunyam.app"],
+              })
+          info["CFBundleURLTypes"] = url_types
           with info_path.open("wb") as f:
               plistlib.dump(info, f)
 
