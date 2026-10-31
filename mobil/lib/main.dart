@@ -763,6 +763,7 @@ class CustomerHome extends StatelessWidget {
 class CafePreviewList extends StatelessWidget {
  final int? limit; const CafePreviewList({this.limit,super.key});
  @override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(cafesKey,starterCafes),builder:(context,s){
+ if(s.hasError)return Center(child:Text('Kafeler yüklenemedi: ${s.error}'));
  if(!s.hasData)return const Center(child:CircularProgressIndicator());
  final items=limit==null?s.data!:s.data!.take(limit!).toList();
  if(items.isEmpty)return const Text('Henüz kafe eklenmedi.');
@@ -778,6 +779,7 @@ class _ExplorePageState extends State<ExplorePage>{
  TextField(onChanged:(v)=>setState(()=>query=v),decoration:const InputDecoration(prefixIcon:Icon(Icons.search),hintText:'Kafe ara',filled:true,fillColor:Colors.white)),
  const SizedBox(height:10),
  FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(cafesKey,starterCafes),builder:(context,s){
+ if(s.hasError)return Center(child:Text('Kafeler yüklenemedi: ${s.error}'));
  if(!s.hasData)return const Center(child:CircularProgressIndicator());
  final cities=['Tümü',...s.data!.map((e)=>'${e['city']}').toSet()];
  final matches=s.data!.where((c)=>(city=='Tümü'||c['city']==city)&&('${c['name']} ${c['type']} ${c['city']}'.toLowerCase().contains(query.toLowerCase()))).toList();
@@ -919,6 +921,7 @@ class _CustomerCardsState extends State<CustomerCards>{
    child: Text('Kasiyerden tek NFC etiketini al, telefonunun NFC alanına yaklaştır ve işlem bitince etiketi geri ver.'),
  ),
  FutureBuilder<List<Object>>(future:Future.wait([LocalData.list(cafesKey,starterCafes),LocalData.stamps()]),builder:(context,s){
+ if(s.hasError)return Center(child:Text('Damga kartları yüklenemedi: ${s.error}'));
  if(!s.hasData)return const Center(child:CircularProgressIndicator());
  final cafes=s.data![0] as List<Map<String,dynamic>>;final stamps=s.data![1] as Map<String,int>;
  return Column(children:cafes.map((c){
@@ -935,6 +938,7 @@ class _CustomerCardsState extends State<CustomerCards>{
  ]);
 }
 class DealPreviewList extends StatelessWidget{const DealPreviewList({super.key});@override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(dealsKey,starterDeals),builder:(context,s){
+ if(s.hasError)return Center(child:Text('Kampanyalar yüklenemedi: ${s.error}'));
  if(!s.hasData)return const Center(child:CircularProgressIndicator());
  final deals=s.data!.where((d)=>d['active']==true).toList();
  return Column(children:deals.take(3).map((d)=>Card(child:ListTile(leading:const CircleAvatar(backgroundColor:cream,child:Icon(Icons.local_offer,color:forest)),title:Text('${d['title']}'),subtitle:Text('${d['benefit']} • ${d['audience']}')))).toList());
@@ -972,6 +976,7 @@ class _CustomerDealsState extends State<CustomerDeals>{
  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
  const Heading('Fırsatlar','Kampanyaları keşfet ve kaydet.'),
  FutureBuilder<List<Object>>(future:Future.wait([LocalData.list(dealsKey,starterDeals),LocalData.list(cafesKey,starterCafes)]),builder:(context,s){
+ if(s.hasError)return Center(child:Text('Fırsatlar yüklenemedi: ${s.error}'));
  if(!s.hasData)return const Center(child:CircularProgressIndicator());
  final deals=s.data![0] as List<Map<String,dynamic>>;final cafes=s.data![1] as List<Map<String,dynamic>>;
  return Column(children:[
@@ -1433,6 +1438,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
     const SizedBox(height: 16),
     const Text('Yönetebildiğin kampanyalar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19)),
     FutureBuilder<List<Map<String,dynamic>>>(future: LocalData.list(dealsKey, starterDeals), builder: (context, s) {
+      if (s.hasError) return Center(child: Padding(padding: const EdgeInsets.all(16), child: Text('Kampanyaların yüklenmesi başarısız: ${s.error}')));
       if (!s.hasData) return const Center(child: CircularProgressIndicator());
       final visible = s.data!.where((d) => _canManage(d)).toList();
       if (visible.isEmpty) return const Padding(padding: EdgeInsets.all(12), child: Text('Henüz sana ait kampanya yok.'));
