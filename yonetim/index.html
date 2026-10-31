@@ -86,15 +86,10 @@ async function loadApplications(){
  $("applicationsTable").innerHTML=data.length?'<table><thead><tr><th>İşletme</th><th>İletişim</th><th>Konum</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>'+data.map(a=>'<tr><td><b>'+esc(a.cafe_name)+'</b><small>'+esc(a.business_type)+'</small></td><td>'+esc(a.profiles?.full_name)+'<small>'+esc(a.profiles?.email)+' • '+esc(a.phone)+'</small></td><td>'+esc(a.district)+' / '+esc(a.province)+'<small>'+esc(a.business_address)+'</small></td><td>'+pill(a.application_status)+'</td><td><div class="actions">'+(a.application_status==="pending"?'<button data-action="approve-business" data-id="'+esc(a.business_id)+'">Onayla</button><button class="danger" data-action="reject-business" data-id="'+esc(a.business_id)+'">Reddet</button>':'—')+'</div></td></tr>').join("")+'</tbody></table>':'<div class="empty">Başvuru bulunmuyor.</div>';
 }
 async function setBusinessStatus(id,status){
- const {error:e1}=await db.from("profiles").update({approval_status:status}).eq("id",id);
- if(e1)throw e1;
- const {error:e2}=await db.from("business_applications").update({application_status:status}).eq("business_id",id);
- if(e2)throw e2;
- const {error:e3}=await db.from("cafes").update({is_active:status==="approved"}).eq("business_id",id);
- if(e3)throw e3;
- const {error:e4}=await db.from("business_orders").update({order_status:status==="approved"?"Etiket hazırlanıyor":"Başvuru reddedildi"}).eq("business_id",id);
- if(e4)throw e4;
- toast(status==="approved"?"İşletme onaylandı.":"Başvuru reddedildi.");await loadApplications();await loadOverview();
+ const {error}=await db.rpc("set_business_application_status",{p_business_id:id,p_status:status});
+ if(error)throw error;
+ toast(status==="approved"?"İşletme onaylandı.":status==="rejected"?"Başvuru reddedildi.":"Başvuru yeniden incelemeye alındı.");
+ await loadApplications();await loadOverview();
 }
 async function loadDelivery(){
  const {data,error}=await db.from("business_orders").select("id,business_id,order_data,order_status,profiles(full_name,email)").order("created_at",{ascending:false});if(error)throw error;
