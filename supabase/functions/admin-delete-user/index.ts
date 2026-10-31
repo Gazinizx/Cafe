@@ -11,6 +11,7 @@ const reply = (status: number, body: Record<string, unknown>) =>
 Deno.serve(async (request: Request) => {
   if (request.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (request.method !== "POST") return reply(405, { error: "Method not allowed" });
+
   const authorization = request.headers.get("Authorization");
   if (!authorization?.startsWith("Bearer ")) return reply(401, { error: "Giriş yapmalısın." });
 
@@ -19,39 +20,37 @@ Deno.serve(async (request: Request) => {
   const service = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !anon || !service) return reply(503, { error: "Yönetici servisi yapılandırılmadı." });
 
-  const auth = createClient(url, anon, { global: { headers: { Authorization: authorization } }, auth: { persistSession: false, autoRefreshToken: false } });
+  const auth = createClient(url, anon, {
+    global: { headers: { Authorization: authorization } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   const { data: authData, error: authError } = await auth.auth.getUser();
   if (authError || !authData.user) return reply(401, { error: "Oturum doğrulanamadı." });
 
   let body: { userId?: string };
   try { body = await request.json(); } catch { return reply(400, { error: "Geçersiz istek." }); }
   const targetId = body.userId ?? "";
-  if (!/^[0-9a-fA-F-]{36}$/.test(targetId) || targetId === authData.user.id) return reply(400, { error: "Geçersiz hedef kullanıcı." });
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(targetId)
+      || targetId === authData.user.id) {
+    return reply(400, { error: "Geçersiz hedef kullanıcı." });
+  }
 
-  const admin = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
+  const admin = createClient(url, service, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
   const { data: profile, error: profileError } = await admin.from("profiles")
     .select("role,approval_status").eq("id", authData.user.id).maybeSingle();
   if (profileError || profile?.role !== "admin" || profile?.approval_status !== "approved") {
     return reply(403, { error: "Bu işlem yalnızca sistem yöneticisine açıktır." });
   }
-  const { data: target, error: targetError } = await admin.from("profiles")
-    .select("role").eq("id", targetId).maybeSingle();
-  if (targetError || !target || target.role === "admin") return reply(404, { error: "Silinecek kullanıcı bulunamadı veya yönetici hesabı korunuyor." });
 
-  const { data: ownedCafes, error: cafesError } = await admin.from("cafes").select("id").eq("owner_id", targetId);
-  if (cafesError) return reply(400, { error: "Kullanıcı işletme kayıtları kontrol edilemedi." });
-  const cafeIds = (ownedCafes ?? []).map((c) => c.id);
-  const { error: customerEventsError } = await admin.from("stamp_events").delete().eq("customer_id", targetId);
-  if (customerEventsError) return reply(400, { error: "Kullanıcı damga geçmişi temizlenemedi." });
-  const { error: issuedEventsError } = await admin.from("stamp_events").delete().eq("issued_by", targetId);
-  if (issuedEventsError) return reply(400, { error: "Kullanıcı işlem kayıtları temizlenemedi." });
-  if (cafeIds.length > 0) {
-    const { error: cafeEventsError } = await admin.from("stamp_events").delete().in("cafe_id", cafeIds);
-    if (cafeEventsError) return reply(400, { error: "İşletme damga geçmişi temizlenemedi." });
-    const { error: cafesDeleteError } = await admin.from("cafes").delete().eq("owner_id", targetId);
-    if (cafesDeleteError) return reply(400, { error: "İşletme kayıtları silinemedi." });
+  const { error } = await admin.rpc("admin_delete_user", {
+    p_target_id: targetId,
+    p_actor_id: authData.user.id,
+  });
+  if (error) {
+    console.error("Atomic admin user deletion failed:", error);
+    return reply(400, { error: error.message || "Kullanıcı hesabı silinemedi." });
   }
-  const { error: deleteError } = await admin.auth.admin.deleteUser(targetId);
-  if (deleteError) return reply(400, { error: "Kullanıcı hesabı silinemedi." });
-  return reply(200, { success: true, message: "Kullanıcı hesabı silindi." });
+  return reply(200, { success: true, message: "Kullanıcı hesabı ve ilişkili kayıtları silindi." });
 });
