@@ -4,6 +4,8 @@ import 'package:nfc_manager/nfc_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+const authRedirectUri = 'com.cafedunyam.app://login-callback/';
+
 const supabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
   defaultValue: 'https://phsmojbrbszobpyeeipc.supabase.co',
@@ -540,6 +542,7 @@ class _AuthPageState extends State<AuthPage> {
         final response = await cloud.auth.signUp(
           email: mail,
           password: password.text,
+          emailRedirectTo: authRedirectUri,
           data: {
             'full_name': name.text.trim(),
             'phone': phone.text.trim(),
