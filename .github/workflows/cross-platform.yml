@@ -168,6 +168,51 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
+      - name: Verify mobile and web share Supabase Auth and check live signup setting
+        continue-on-error: true
+        run: |
+          python3 - <<'PY'
+          import json
+          import re
+          from pathlib import Path
+          from urllib.request import Request, urlopen
+
+          mobile = Path("mobil/lib/main.dart").read_text()
+          web = Path("yonetim/index.html").read_text()
+
+          def dart_default(name):
+              prefix = f"const {name} = String.fromEnvironment("
+              line = next((item for item in mobile.splitlines() if item.strip().startswith(prefix)), None)
+              if line is None:
+                  raise SystemExit(f"Could not read {name} from mobile configuration")
+              match = re.search(r"defaultValue: '([^']+)'", line)
+              if not match:
+                  raise SystemExit(f"Could not parse {name} from mobile configuration")
+              return match.group(1)
+
+          mobile_url = dart_default("supabaseUrl")
+          mobile_key = dart_default("supabasePublishableKey")
+          web_url = re.search(r'const SUPABASE_URL = "([^"]+)"', web)
+          web_key = re.search(r'const SUPABASE_PUBLISHABLE_KEY = "([^"]+)"', web)
+          if not web_url or not web_key:
+              raise SystemExit("Web Supabase configuration was not found")
+          if mobile_url != web_url.group(1) or mobile_key != web_key.group(1):
+              raise SystemExit("Mobile and web do not use the same Supabase project/key")
+          print("Mobile and web use the same Supabase project and publishable key.")
+
+          request = Request(
+              mobile_url.rstrip("/") + "/auth/v1/settings",
+              headers={"apikey": mobile_key},
+          )
+          with urlopen(request, timeout=20) as response:
+              settings = json.loads(response.read().decode("utf-8"))
+          if "disable_signup" not in settings:
+              raise SystemExit("Supabase Auth settings did not expose disable_signup")
+          print("Supabase Auth new-user signup disabled:", settings["disable_signup"])
+          print("Email confirmation required:", not bool(settings.get("mailer_autoconfirm", False)))
+          if settings["disable_signup"]:
+              raise SystemExit("Supabase Auth currently blocks new user registration")
+          PY
       - name: Install Deno
         uses: denoland/setup-deno@v2
         with:
