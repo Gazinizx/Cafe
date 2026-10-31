@@ -58,7 +58,17 @@ flutter run --dart-define=SUPABASE_URL=https://PROJECT.supabase.co --dart-define
 ```
 
 
-## 5. GitHub bağlantısı (bir kez senin hesabından)
+## 5. E-posta doğrulama yönlendirmesi (bir kez Supabase Dashboard'da)
+Mobil uygulama e-posta doğrulamasından sonra şu özel bağlantıya döner:
+`com.cafedunyam.app://login-callback/`
+
+1. Supabase Dashboard → Authentication → URL Configuration sayfasını aç.
+2. **Additional Redirect URLs** alanına tam olarak `com.cafedunyam.app://login-callback/` ekle ve kaydet.
+3. Site URL alanını mobil callback ile değiştirme; web yönetim adresi varsa onu koru.
+
+Android ve iOS derleme iş akışları bu URL şemasını otomatik olarak uygulama paketine ekler. Supabase tarafındaki izin listesi eklenmeden e-posta bağlantısı uygulamaya dönemeyebilir.
+
+## 6. GitHub bağlantısı (bir kez senin hesabından)
 Bu depo Supabase CLI yapısına hazırlandı: `supabase/config.toml` ve `supabase/migrations/` klasörü mevcut. Depo kökünde `supabase/` klasörü bulunduğu için çalışma dizini `.` olmalı.
 
 1. [Supabase Dashboard](https://supabase.com/dashboard) üzerinden kendi hesabınla giriş yap ve mevcut Cafe Dünyam projesini aç.
