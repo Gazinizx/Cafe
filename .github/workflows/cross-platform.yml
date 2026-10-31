@@ -53,7 +53,7 @@ jobs:
               if permission not in s:
                   s = s.replace(
                       "<application",
-                      f'    <uses-permission android:name="{permission}" />\\n    <application',
+                      f'    <uses-permission android:name="{permission}" />' + chr(10) + '    <application',
                       1,
                   )
           if "android.permission.INTERNET" not in s:
