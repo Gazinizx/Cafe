@@ -182,10 +182,12 @@ jobs:
 
           def dart_default(name):
               prefix = f"const {name} = String.fromEnvironment("
-              line = next((item for item in mobile.splitlines() if item.strip().startswith(prefix)), None)
-              if line is None:
+              start = mobile.find(prefix)
+              if start < 0:
                   raise SystemExit(f"Could not read {name} from mobile configuration")
-              match = re.search(r"defaultValue: '([^']+)'", line)
+              end = mobile.find(");", start)
+              block = mobile[start:end if end >= 0 else len(mobile)]
+              match = re.search(r"defaultValue: '([^']+)'", block)
               if not match:
                   raise SystemExit(f"Could not parse {name} from mobile configuration")
               return match.group(1)
