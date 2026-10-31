@@ -41,6 +41,39 @@ SupabaseClient get cloud {
   throw StateError('Supabase has not been initialized. Call initializeSupabase() first.');
 }
 
+String authFailureMessage(Object error) {
+  if (error is AuthException) {
+    final detail = error.message.trim();
+    return detail.isEmpty
+        ? 'Hesap işlemi başarısız oldu.'
+        : 'Hesap işlemi başarısız: $detail';
+  }
+  if (error is PostgrestException) {
+    final details = <String>[];
+    if (error.code != null && error.code!.isNotEmpty) {
+      details.add('Kod: ${error.code}');
+    }
+    if (error.message.trim().isNotEmpty) details.add(error.message.trim());
+    if (error.hint != null && error.hint!.trim().isNotEmpty) {
+      details.add('İpucu: ${error.hint!.trim()}');
+    }
+    return 'Veritabanı hatası: ${details.join(' — ')}';
+  }
+
+  final detail = error.toString().trim();
+  final normalized = detail.toLowerCase();
+  if (normalized.contains('socketexception') ||
+      normalized.contains('failed host lookup') ||
+      normalized.contains('connection refused') ||
+      normalized.contains('network is unreachable')) {
+    return 'Supabase sunucusuna bağlanılamadı. İnternet bağlantını kontrol et. Ayrıntı: $detail';
+  }
+  if (normalized.contains('timeout')) {
+    return 'Supabase sunucusu zamanında yanıt vermedi. Tekrar dene. Ayrıntı: $detail';
+  }
+  return 'İşlem tamamlanamadı. Hata ayrıntısı: $detail';
+}
+
 Future<Map<String, dynamic>> cloudProfile(User authUser) async {
   final row = await cloud.from('profiles').select().eq('id', authUser.id).maybeSingle();
   if (row == null) {
@@ -576,16 +609,30 @@ class _AuthPageState extends State<AuthPage> {
         final user = await cloudProfile(authUser);
         if (mounted) widget.onDone(user);
       }
-    } on AuthException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.message)));
-    } on PostgrestException catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Bulut veritabanı hatası: ${e.message}. Supabase şema kurulumunu kontrol et.')),
-      );
-    } catch (e) {
-      final networkError = e.toString().contains('SocketException') || e.toString().contains('Failed host lookup');
-      final message = networkError ? 'Sunucuya bağlanılamıyor. İnternet bağlantını kontrol edip tekrar dene.' : 'İşlem tamamlanamadı. Bilgilerini kontrol edip tekrar dene.';
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    } on AuthException catch (e, stackTrace) {
+      debugPrint('Cafe Auth error: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(authFailureMessage(e))),
+        );
+      }
+    } on PostgrestException catch (e, stackTrace) {
+      debugPrint('Cafe PostgREST error: $e');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(authFailureMessage(e))),
+        );
+      }
+    } catch (e, stackTrace) {
+      debugPrint('Cafe auth flow unexpected error (${e.runtimeType}): $e');
+      debugPrintStack(stackTrace: stackTrace);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(authFailureMessage(e))),
+        );
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }
