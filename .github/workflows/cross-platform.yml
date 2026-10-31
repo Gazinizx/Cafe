@@ -196,7 +196,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Verify mobile and web share Supabase Auth and check live signup setting
-        continue-on-error: true
         run: |
           python3 - <<'PY'
           import json
