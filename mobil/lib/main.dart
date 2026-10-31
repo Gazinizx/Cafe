@@ -1109,6 +1109,7 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
 
   @override Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loadError != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text('Paket ve ödeme bilgileri yüklenemedi: $_loadError'), const SizedBox(height: 12), FilledButton(onPressed: () { setState(() => _loading = true); _load(); }, child: const Text('Tekrar dene'))])));
     return ListView(padding: const EdgeInsets.all(20), children: [
       const Heading('Sadakat ödülü', 'Müşterinin kaç damgada hangi ödülü kazanacağını belirle.'),
       DropdownButtonFormField<String>(
@@ -1172,10 +1173,12 @@ class _BusinessBillingState extends State<BusinessBilling> {
   String? _selectedPackage;
   String _method = 'cash';
   bool _loading = true, _requesting = false;
+  String? _loadError;
 
   @override void initState() { super.initState(); _load(); }
 
   Future<void> _load() async {
+    _loadError = null;
     try {
       final packageRows = await cloud.from('subscription_packages').select().eq('is_active', true).order('price_try');
       final paymentRows = await cloud.from('manual_payments').select('*, subscription_packages(name,billing_period)')
@@ -1189,7 +1192,7 @@ class _BusinessBillingState extends State<BusinessBilling> {
         _selectedPackage = _packages.isEmpty ? null : _packages.first['id'].toString();
       }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket bilgileri yüklenemedi: $error')));
+      _loadError = error.toString();
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -1863,6 +1866,7 @@ class _AdminBillingState extends State<AdminBilling> {
   String? _selectedBusinessId, _selectedBranchId;
   List<Map<String,dynamic>> _businesses = [], _branchesForTags = [], _tags = [];
   bool _loading = true, _saving = false;
+  String? _loadError;
   List<Map<String,dynamic>> _packages = [];
   List<Map<String,dynamic>> _payments = [];
 
@@ -1870,6 +1874,7 @@ class _AdminBillingState extends State<AdminBilling> {
   @override void dispose() { _name.dispose(); _description.dispose(); _price.dispose(); _branches.dispose(); _employees.dispose(); _tagUid.dispose(); _secretReference.dispose(); super.dispose(); }
 
   Future<void> _load() async {
+    _loadError = null;
     try {
       final packageRows = await cloud.from('subscription_packages').select().order('created_at', ascending: false);
       final paymentRows = await cloud.from('manual_payments')
@@ -1894,7 +1899,7 @@ class _AdminBillingState extends State<AdminBilling> {
         _selectedBranchId = availableBranches.isEmpty ? null : availableBranches.first['id'].toString();
       }
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket ve tahsilatlar yüklenemedi: $error')));
+      _loadError = error.toString();
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -2048,6 +2053,7 @@ class _AdminBillingState extends State<AdminBilling> {
 
   @override Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loadError != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text('Paketler ve tahsilatlar yüklenemedi: $_loadError'), const SizedBox(height: 12), FilledButton(onPressed: () { setState(() => _loading = true); _load(); }, child: const Text('Tekrar dene'))])));
     return ListView(padding: const EdgeInsets.all(18), children: [
       const Heading('Paketler ve tahsilatlar', 'Paket fiyatlarını belirle; nakit veya havale tahsilatlarını doğrula.'),
       const Text('Yeni abonelik paketi', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
