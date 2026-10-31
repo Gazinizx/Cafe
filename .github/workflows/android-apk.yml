@@ -59,6 +59,19 @@ jobs:
               s = s.replace("<application", '    <uses-permission android:name="android.permission.NFC" />\n    <application', 1)
           if "android.permission.INTERNET" not in s:
               raise SystemExit("Android release manifest is missing INTERNET permission")
+          if 'android:scheme="com.cafedunyam.app"' not in s:
+              start = s.find("<activity")
+              end = s.find("</activity>", start)
+              if start < 0 or end < 0:
+                  raise SystemExit("MainActivity declaration was not found for auth deep link")
+              intent_filter = """              <intent-filter>
+                  <action android:name="android.intent.action.VIEW" />
+                  <category android:name="android.intent.category.DEFAULT" />
+                  <category android:name="android.intent.category.BROWSABLE" />
+                  <data android:scheme="com.cafedunyam.app" android:host="login-callback" />
+              </intent-filter>
+          """
+              s = s[:end] + intent_filter + s[end:]
           if "android.hardware.nfc" not in s:
               s = s.replace("<application", '    <uses-feature android:name="android.hardware.nfc" android:required="false" />\n    <application', 1)
           s = re.sub(r'android:label="[^"]+"', 'android:label="Cafe Dünyam"', s, count=1)
