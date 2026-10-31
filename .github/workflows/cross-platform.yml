@@ -49,9 +49,16 @@ jobs:
           from pathlib import Path
           p = Path("android/app/src/main/AndroidManifest.xml")
           s = p.read_text()
-          if "android.permission.NFC" not in s:
-              s = s.replace("<application", '    <uses-permission android:name="android.permission.NFC" />\n    <application', 1)
-              p.write_text(s)
+          for permission in ("android.permission.INTERNET", "android.permission.NFC"):
+              if permission not in s:
+                  s = s.replace(
+                      "<application",
+                      f'    <uses-permission android:name="{permission}" />\\n    <application',
+                      1,
+                  )
+          if "android.permission.INTERNET" not in s:
+              raise SystemExit("Android manifest is missing INTERNET permission")
+          p.write_text(s)
           PY
       - name: Install dependencies
         working-directory: mobil
