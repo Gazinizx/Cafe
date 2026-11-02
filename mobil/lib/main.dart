@@ -1878,7 +1878,7 @@ class _AdminBillingState extends State<AdminBilling> {
     try {
       final packageRows = await cloud.from('subscription_packages').select().order('created_at', ascending: false);
       final paymentRows = await cloud.from('manual_payments')
-        .select('*, profiles!manual_payments_business_id_fkey(full_name,email), subscription_packages(name,billing_period)')
+        .select('*, subscription_packages(name,billing_period)')
         .order('created_at', ascending: false);
       final businessRows = await cloud.from('profiles').select('id,full_name,email')
         .eq('role', 'business').eq('approval_status', 'approved').order('full_name');
@@ -2128,7 +2128,8 @@ class _AdminBillingState extends State<AdminBilling> {
       const Text('Tahsilat talepleri', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
       if (_payments.isEmpty) const Text('Henüz tahsilat talebi yok.'),
       ..._payments.map((p) {
-        final business = p['profiles'] is Map ? Map<String,dynamic>.from(p['profiles'] as Map) : <String,dynamic>{};
+        final businessMatches = _businesses.where((b) => b['id'].toString() == p['business_id'].toString()).toList();
+        final business = businessMatches.isNotEmpty ? businessMatches.first : <String,dynamic>{};
         final package = p['subscription_packages'] is Map ? Map<String,dynamic>.from(p['subscription_packages'] as Map) : <String,dynamic>{};
         final pending = p['status'] == 'pending';
         return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
