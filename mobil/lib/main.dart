@@ -833,6 +833,25 @@ class CafeDetailPage extends StatelessWidget{
  ]));
 }
 
+const campaignStampIconCatalog = <String, Map<String, dynamic>>{
+  'coffee': {'label': 'Kahve', 'icon': 'coffee'},
+  'cake': {'label': 'Pasta / tatlı', 'icon': 'cake'},
+  'stamp': {'label': 'Damga', 'icon': 'stamp'},
+  'pizza': {'label': 'Pizza', 'icon': 'pizza'},
+  'ice_cream': {'label': 'Dondurma', 'icon': 'ice_cream'},
+  'sandwich': {'label': 'Sandviç', 'icon': 'sandwich'},
+  'star': {'label': 'Yıldız', 'icon': 'star'},
+  'heart': {'label': 'Kalp', 'icon': 'heart'},
+  'burger': {'label': 'Hamburger', 'icon': 'burger'},
+  'tea': {'label': 'Çay', 'icon': 'tea'},
+  'cookie': {'label': 'Kurabiye', 'icon': 'cookie'},
+  'donut': {'label': 'Donut', 'icon': 'donut'},
+  'gift': {'label': 'Hediye', 'icon': 'gift'},
+  'leaf': {'label': 'Yaprak', 'icon': 'leaf'},
+  'music': {'label': 'Müzik', 'icon': 'music'},
+  'book': {'label': 'Kitap', 'icon': 'book'},
+};
+
 IconData campaignStampIcon(String? key) => switch (key) {
   'cake' => Icons.cake_outlined,
   'stamp' => Icons.approval_outlined,
@@ -841,6 +860,14 @@ IconData campaignStampIcon(String? key) => switch (key) {
   'sandwich' => Icons.lunch_dining_outlined,
   'star' => Icons.star_outline,
   'heart' => Icons.favorite_border,
+  'burger' => Icons.lunch_dining_outlined,
+  'tea' => Icons.emoji_food_beverage_outlined,
+  'cookie' => Icons.cookie_outlined,
+  'donut' => Icons.donut_small_outlined,
+  'gift' => Icons.card_giftcard_outlined,
+  'leaf' => Icons.eco_outlined,
+  'music' => Icons.music_note_outlined,
+  'book' => Icons.menu_book_outlined,
   _ => Icons.coffee_outlined,
 };
 
@@ -1622,6 +1649,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
   XFile? _backgroundImage;
   DateTime? _endsAt;
   List<Map<String,dynamic>> _branches = [];
+  List<Map<String,dynamic>> _stampIcons = [];
   String? _selectedCafeId;
 
   @override void initState() { super.initState(); _loadBranches(); }
@@ -1633,7 +1661,10 @@ class _BusinessDealsState extends State<BusinessDeals> {
     try {
       final rows = await cloud.from('cafes').select('id,name,is_main_branch')
         .eq('business_id', widget.user['id']).order('is_main_branch', ascending: false).order('created_at', ascending: true);
+      final iconRows = await cloud.from('campaign_stamp_icons').select('icon_key,label,icon_name')
+        .eq('is_active', true).order('sort_order').order('label');
       _branches = (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _stampIcons = (iconRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
       _selectedCafeId = widget.user['cafeId']?.toString() ?? (_branches.isEmpty ? null : _branches.first['id'].toString());
       if (mounted) setState(() {});
     } catch (error) { _reportSyncError(error); }
@@ -1653,8 +1684,8 @@ class _BusinessDealsState extends State<BusinessDeals> {
     } catch (error) { _reportSyncError(error); }
   }
 
-  Future<String?> _uploadBackground(String campaignId) async {
-    final file = _backgroundImage;
+  Future<String?> _uploadBackground(String campaignId, {XFile? selectedFile}) async {
+    final file = selectedFile ?? _backgroundImage;
     if (file == null) return null;
     final lower = file.name.toLowerCase();
     final extension = lower.endsWith('.png') ? 'png' : lower.endsWith('.webp') ? 'webp' : 'jpg';
@@ -1708,30 +1739,84 @@ class _BusinessDealsState extends State<BusinessDeals> {
     final editBenefit = TextEditingController(text: '${campaign['benefit']}');
     final editGoal = TextEditingController(text: '${campaign['stampsRequired'] ?? 8}');
     final editReward = TextEditingController(text: '${campaign['rewardTitle'] ?? 'Ödül'}');
-    final result = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-      title: const Text('Kampanya kartını düzenle'),
-      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(controller: editTitle, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
-        TextField(controller: editBenefit, decoration: const InputDecoration(labelText: 'Avantaj açıklaması')),
-        TextField(controller: editGoal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Damga hedefi')),
-        TextField(controller: editReward, decoration: const InputDecoration(labelText: 'Ödül adı')),
-      ])),
-      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Kaydet'))],
+    final editDescription = TextEditingController(text: '${campaign['rewardDescription'] ?? ''}');
+    XFile? editBackground;
+    var removeBackground = false;
+    var editIcon = campaign['stampIcon']?.toString() ?? 'coffee';
+    final result = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, refreshDialog) => AlertDialog(
+        title: const Text('Kampanya kartını düzenle'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: editTitle, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
+          TextField(controller: editBenefit, decoration: const InputDecoration(labelText: 'Avantaj açıklaması')),
+          TextField(controller: editGoal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Damga hedefi')),
+          TextField(controller: editReward, decoration: const InputDecoration(labelText: 'Ödül adı')),
+          TextField(controller: editDescription, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Ödül açıklaması')),
+          const SizedBox(height: 10),
+          DropdownButtonFormField<String>(
+            value: _stampIcons.any((item) => item['icon_key'] == editIcon) ? editIcon : (_stampIcons.isEmpty ? null : _stampIcons.first['icon_key'].toString()),
+            decoration: const InputDecoration(labelText: 'Damga simgesi'),
+            items: _stampIcons.map((item) => DropdownMenuItem<String>(
+              value: item['icon_key'].toString(),
+              child: Row(children: [Icon(campaignStampIcon(item['icon_name']?.toString())), const SizedBox(width: 8), Text(item['label'].toString())]),
+            )).toList(),
+            onChanged: (value) => refreshDialog(() => editIcon = value ?? editIcon),
+          ),
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () async {
+              final file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 88, maxWidth: 1800);
+              if (file != null) refreshDialog(() { editBackground = file; removeBackground = false; });
+            },
+            icon: const Icon(Icons.image_outlined),
+            label: Text(editBackground == null ? 'Kart arka planını değiştir' : 'Yeni görsel: ${editBackground!.name}'),
+          ),
+          if ((campaign['backgroundImageUrl'] ?? '').toString().isNotEmpty)
+            CheckboxListTile(
+              contentPadding: EdgeInsets.zero,
+              value: removeBackground,
+              onChanged: (value) => refreshDialog(() { removeBackground = value == true; if (removeBackground) editBackground = null; }),
+              title: const Text('Mevcut arka planı kaldır'),
+            ),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Kaydet')),
+        ],
+      ),
     ));
     try {
       final newGoal = int.tryParse(editGoal.text.trim());
-      if (result == true && editTitle.text.trim().isNotEmpty && editBenefit.text.trim().isNotEmpty &&
-          editReward.text.trim().isNotEmpty && newGoal != null && newGoal >= 1 && newGoal <= 100) {
-        await cloud.from('campaigns').update({
-          'title': editTitle.text.trim(), 'benefit': editBenefit.text.trim(),
-          'stamps_required': newGoal, 'reward_title': editReward.text.trim(),
-        }).eq('id', campaign['id']);
-        if (mounted) setState(() {});
+      if (result == true) {
+        if (editTitle.text.trim().isEmpty || editBenefit.text.trim().isEmpty ||
+            editReward.text.trim().isEmpty || newGoal == null || newGoal < 1 || newGoal > 100) {
+          throw StateError('Başlık, avantaj, ödül ve 1–100 arası damga hedefi gerekli.');
+        }
+        final updates = <String,dynamic>{
+          'title': editTitle.text.trim(),
+          'benefit': editBenefit.text.trim(),
+          'stamps_required': newGoal,
+          'reward_title': editReward.text.trim(),
+          'reward_description': editDescription.text.trim(),
+          'stamp_icon': editIcon,
+        };
+        if (editBackground != null) {
+          final imageUrl = await _uploadBackground(campaign['id'].toString(), selectedFile: editBackground);
+          if (imageUrl != null) updates['background_image_url'] = imageUrl;
+        } else if (removeBackground) {
+          updates['background_image_url'] = null;
+        }
+        await cloud.from('campaigns').update(updates).eq('id', campaign['id']);
+        if (mounted) {
+          setState(() {});
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kampanya kartı güncellendi.')));
+        }
       }
     } catch (error) { _reportSyncError(error); }
-    finally { editTitle.dispose(); editBenefit.dispose(); editGoal.dispose(); editReward.dispose(); }
+    finally {
+      editTitle.dispose(); editBenefit.dispose(); editGoal.dispose(); editReward.dispose(); editDescription.dispose();
+    }
   }
-
   Future<void> _toggle(Map<String,dynamic> campaign) async {
     if (!_canManage(campaign)) return;
     try {
@@ -1760,18 +1845,12 @@ class _BusinessDealsState extends State<BusinessDeals> {
     TextField(controller: rewardDescription, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Ödül açıklaması')),
     const SizedBox(height: 10),
     DropdownButtonFormField<String>(
-      value: stampIcon,
+      value: _stampIcons.any((item) => item['icon_key'] == stampIcon) ? stampIcon : (_stampIcons.isEmpty ? null : _stampIcons.first['icon_key'].toString()),
       decoration: const InputDecoration(labelText: 'Damga simgesi'),
-      items: const [
-        DropdownMenuItem(value: 'coffee', child: Text('Kahve')),
-        DropdownMenuItem(value: 'cake', child: Text('Pasta / tatlı')),
-        DropdownMenuItem(value: 'stamp', child: Text('Damga')),
-        DropdownMenuItem(value: 'pizza', child: Text('Pizza')),
-        DropdownMenuItem(value: 'ice_cream', child: Text('Dondurma')),
-        DropdownMenuItem(value: 'sandwich', child: Text('Sandviç')),
-        DropdownMenuItem(value: 'star', child: Text('Yıldız')),
-        DropdownMenuItem(value: 'heart', child: Text('Kalp')),
-      ],
+      items: _stampIcons.map((item) => DropdownMenuItem<String>(
+        value: item['icon_key'].toString(),
+        child: Row(children: [Icon(campaignStampIcon(item['icon_name']?.toString())), const SizedBox(width: 8), Text(item['label'].toString())]),
+      )).toList(),
       onChanged: (value) => setState(() => stampIcon = value ?? 'coffee'),
     ),
     const SizedBox(height: 10),
@@ -1799,18 +1878,31 @@ class _BusinessDealsState extends State<BusinessDeals> {
       if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
       final visible = snapshot.data!.where(_canManage).toList();
       if (visible.isEmpty) return const Padding(padding: EdgeInsets.all(12), child: Text('Henüz sana ait kampanya yok.'));
-      return Column(children: visible.map((campaign) => Card(child: ListTile(
-        title: Text('${campaign['title']}'),
-        subtitle: Text('${campaign['benefit']}\n${campaign['stampsRequired'] ?? 8} damga • ${campaign['rewardTitle'] ?? 'Ödül'} • Durum: ${campaign['active'] == true ? 'Aktif' : 'Arşivde'}'),
-        isThreeLine: true,
-        trailing: PopupMenuButton<String>(onSelected: (value) {
-          if (value == 'edit') _edit(campaign);
-          if (value == 'toggle') _toggle(campaign);
-        }, itemBuilder: (_) => const [
-          PopupMenuItem(value: 'edit', child: Text('Düzenle')),
-          PopupMenuItem(value: 'toggle', child: Text('Aktif / arşivle')),
-        ]),
-      ))).toList());
+      return Column(children: visible.map((campaign) {
+        final imageUrl = campaign['backgroundImageUrl']?.toString();
+        final goal = (campaign['stampsRequired'] as num?)?.toInt() ?? 8;
+        return Card(clipBehavior: Clip.antiAlias, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          Container(height: 112, padding: const EdgeInsets.all(16), decoration: BoxDecoration(
+            image: imageUrl != null && imageUrl.isNotEmpty ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover, colorFilter: ColorFilter.mode(Colors.black.withOpacity(.48), BlendMode.darken)) : null,
+            gradient: imageUrl == null || imageUrl.isEmpty ? const LinearGradient(colors: [forest, Color(0xFF46554B)]) : null,
+          ), child: Row(children: [
+            Icon(campaignStampIcon(campaign['stampIcon']?.toString()), color: Colors.white, size: 30),
+            const SizedBox(width: 12),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+              Text('${campaign['title']}', style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w900)),
+              Text('${campaign['active'] == true ? 'Aktif' : 'Arşivde'} • $goal damga • ${campaign['rewardTitle'] ?? 'Ödül'}', style: const TextStyle(color: Colors.white70)),
+            ])),
+            PopupMenuButton<String>(iconColor: Colors.white, onSelected: (value) {
+              if (value == 'edit') _edit(campaign);
+              if (value == 'toggle') _toggle(campaign);
+            }, itemBuilder: (_) => const [
+              PopupMenuItem(value: 'edit', child: Text('Kartı düzenle')),
+              PopupMenuItem(value: 'toggle', child: Text('Aktif / arşivle')),
+            ]),
+          ])),
+          Padding(padding: const EdgeInsets.all(14), child: Text('${campaign['benefit']}')),
+        ]));
+      }).toList());
     }),
   ]);
 }
