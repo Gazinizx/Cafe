@@ -2279,6 +2279,22 @@ class AdminDashboard extends StatelessWidget {
         const Heading('Yönetim kısayolları', 'Sık kullanılan işlemlere hızlı erişim.'),
         Card(child: ListTile(leading: const Icon(Icons.fact_check, color: brown), title: const Text('Başvuruları incele'), subtitle: Text('$pending başvuru inceleme bekliyor'), trailing: const Icon(Icons.chevron_right), onTap: () => onNavigate(1))),
         Card(child: ListTile(leading: const Icon(Icons.campaign, color: brown), title: const Text('Kampanya denetimi'), subtitle: Text('$active aktif kampanya'), trailing: const Icon(Icons.chevron_right), onTap: () => onNavigate(2))),
+        const SizedBox(height: 24),
+        const Heading('Damga simgesi kütüphanesi', 'İşletmeler yalnızca burada etkinleştirilen hazır simgeleri kullanabilir.'),
+        Align(alignment: Alignment.centerRight, child: FilledButton.icon(
+          onPressed: _addIcon,
+          icon: const Icon(Icons.add),
+          label: const Text('Hazır simge ekle'),
+        )),
+        if (_iconsLoading) const Center(child: CircularProgressIndicator()),
+        if (!_iconsLoading && _icons.isEmpty) const Text('Henüz damga simgesi bulunamadı.'),
+        ..._icons.map((icon) => Card(child: SwitchListTile(
+          secondary: CircleAvatar(backgroundColor: cream, child: Icon(campaignStampIcon(icon['icon_name']?.toString()), color: forest)),
+          title: Text(icon['label'].toString()),
+          subtitle: Text(icon['is_active'] == true ? 'İşletmeler seçebilir' : 'İşletmeler için kapalı'),
+          value: icon['is_active'] == true,
+          onChanged: (_) => _toggleIcon(icon),
+        ))),
         const LocalModeNote(),
       ]);
     },
@@ -2720,6 +2736,83 @@ class AdminCampaigns extends StatefulWidget {
   @override State<AdminCampaigns> createState() => _AdminCampaignsState();
 }
 class _AdminCampaignsState extends State<AdminCampaigns> {
+  List<Map<String,dynamic>> _icons = [];
+  bool _iconsLoading = true;
+
+  @override void initState() { super.initState(); _loadIcons(); }
+
+  Future<void> _loadIcons() async {
+    try {
+      final rows = await cloud.from('campaign_stamp_icons').select().order('sort_order').order('label');
+      _icons = (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Damga simgeleri yüklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _iconsLoading = false);
+    }
+  }
+
+  Future<void> _toggleIcon(Map<String,dynamic> icon) async {
+    try {
+      await cloud.from('campaign_stamp_icons').update({'is_active': icon['is_active'] != true}).eq('icon_key', icon['icon_key']);
+      await _loadIcons();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Simge durumu değiştirilemedi: $error')));
+    }
+  }
+
+  Future<void> _addIcon() async {
+    final available = campaignStampIconCatalog.entries.where((entry) => !_icons.any((row) => row['icon_key'] == entry.key)).toList();
+    if (available.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Eklenebilecek başka hazır simge yok.')));
+      return;
+    }
+    String selectedKey = available.first.key;
+    final label = TextEditingController(text: available.first.value['label'].toString());
+    final saved = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, refresh) => AlertDialog(
+        title: const Text('Damga simgesi ekle'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            value: selectedKey,
+            decoration: const InputDecoration(labelText: 'Hazır simge'),
+            items: available.map((entry) => DropdownMenuItem(
+              value: entry.key,
+              child: Row(children: [Icon(campaignStampIcon(entry.key)), const SizedBox(width: 8), Text(entry.value['label'].toString())]),
+            )).toList(),
+            onChanged: (value) => refresh(() {
+              selectedKey = value ?? selectedKey;
+              label.text = campaignStampIconCatalog[selectedKey]!['label'].toString();
+            }),
+          ),
+          const SizedBox(height: 8),
+          TextField(controller: label, maxLength: 40, decoration: const InputDecoration(labelText: 'Müşteriye gösterilecek ad')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Ekle')),
+        ],
+      ),
+    ));
+    try {
+      if (saved == true) {
+        if (label.text.trim().isEmpty) throw StateError('Simge adı boş olamaz.');
+        await cloud.from('campaign_stamp_icons').insert({
+          'icon_key': selectedKey,
+          'label': label.text.trim(),
+          'icon_name': selectedKey,
+          'sort_order': (_icons.map((r) => (r['sort_order'] as num?)?.toInt() ?? 0).fold<int>(0, (a,b) => a > b ? a : b)) + 10,
+          'is_active': true,
+        });
+        await _loadIcons();
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Simge eklenemedi: $error')));
+    } finally {
+      label.dispose();
+    }
+  }
+
   Future<void> _addCampaign() async {
     final cafes = await cloud.from('cafes').select('id,name').eq('is_active', true).order('name');
     if (!mounted) return;
@@ -2826,16 +2919,28 @@ class _AdminCampaignsState extends State<AdminCampaigns> {
           label: const Text('Kampanya ekle'),
         )),
         const SizedBox(height: 10),
-        ...s.data!.map((d) => Card(child: ListTile(
-          title: Text('${d['title']}'),
-          subtitle: Text('${d['benefit']} • Sahip: ${d['ownerName'] ?? d['ownerEmail'] ?? d['cafeId'] ?? 'Belirtilmemiş'}'),
-          isThreeLine: true,
-          trailing: PopupMenuButton<String>(onSelected: (v) { if (v == 'toggle') _toggle(d); else if (v == 'edit') _edit(d); else _delete('${d['id']}'); }, itemBuilder: (_) => const [
-            PopupMenuItem(value: 'edit', child: Text('Düzenle')),
-            PopupMenuItem(value: 'toggle', child: Text('Aktif / pasif')),
-            PopupMenuItem(value: 'delete', child: Text('Sil')),
-          ]),
-        ))),
+        ...s.data!.map((d) {
+          final imageUrl = d['backgroundImageUrl']?.toString();
+          return Card(clipBehavior: Clip.antiAlias, child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Container(height: 116, padding: const EdgeInsets.all(16), decoration: BoxDecoration(
+              image: imageUrl != null && imageUrl.isNotEmpty ? DecorationImage(image: NetworkImage(imageUrl), fit: BoxFit.cover, colorFilter: ColorFilter.mode(Colors.black.withOpacity(.48), BlendMode.darken)) : null,
+              gradient: imageUrl == null || imageUrl.isEmpty ? const LinearGradient(colors: [forest, Color(0xFF46554B)]) : null,
+            ), child: Row(children: [
+              const Icon(Icons.local_offer_outlined, color: Colors.white, size: 30),
+              const SizedBox(width: 12),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+                Text('${d['title']}', style: const TextStyle(color: Colors.white, fontSize: 19, fontWeight: FontWeight.w900)),
+                Text('${d['ownerName'] ?? 'İşletme'} • ${d['active'] == true ? 'Aktif' : 'Pasif'}', style: const TextStyle(color: Colors.white70)),
+              ])),
+              PopupMenuButton<String>(iconColor: Colors.white, onSelected: (v) { if (v == 'toggle') _toggle(d); else if (v == 'edit') _edit(d); else _delete('${d['id']}'); }, itemBuilder: (_) => const [
+                PopupMenuItem(value: 'edit', child: Text('Düzenle')),
+                PopupMenuItem(value: 'toggle', child: Text('Aktif / pasif')),
+                PopupMenuItem(value: 'delete', child: Text('Sil')),
+              ]),
+            ])),
+            Padding(padding: const EdgeInsets.all(14), child: Text('${d['benefit']}')),
+          ]));
+        }),
         const LocalModeNote(),
       ]);
     },
