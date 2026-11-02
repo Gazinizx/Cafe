@@ -97,9 +97,9 @@ void main() {
   });
 
   test('Cafe Dünyam QR payload accepts only 256-bit lowercase hex tokens', () {
-    final token = 'a' * 64;
+    final token = List.filled(64, 'a').join();
     expect(cafeQrTokenFromPayload('CDQR:' + token), token);
-    expect(cafeQrTokenFromPayload('CDQR:' + ('A' * 64)), isNull);
+    expect(cafeQrTokenFromPayload('CDQR:' + List.filled(64, 'A').join()), isNull);
     expect(cafeQrTokenFromPayload('OTHER:' + token), isNull);
     expect(cafeQrTokenFromPayload('CDQR:short'), isNull);
     expect(cafeQrTokenFromPayload(null), isNull);
