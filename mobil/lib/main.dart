@@ -2868,14 +2868,13 @@ class _AdminShellState extends State<AdminShell> {
   }
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(leading: const Padding(padding: EdgeInsets.all(8), child: CafeLogo(size: 38)), title: const Text('Yönetim Merkezi', style: TextStyle(fontWeight: FontWeight.w900)), actions: [IconButton(tooltip: 'Çıkış yap', onPressed: _logout, icon: const Icon(Icons.logout))]),
-    body: IndexedStack(index: tab, children: [AdminDashboard(onNavigate: (index) => setState(() => tab = index)), const AdminApplications(), const AdminCampaigns(), const AdminUsers(), const AdminOrders(), const AdminBilling(), const AdminSettings()]),
+    body: IndexedStack(index: tab, children: [AdminDashboard(onNavigate: (index) => setState(() => tab = index)), const AdminApplications(), const AdminCampaigns(), const AdminUsers(), const AdminOrders(), const AdminSettings()]),
     bottomNavigationBar: NavigationBar(selectedIndex: tab, onDestinationSelected: (i) => setState(() => tab = i), destinations: const [
       NavigationDestination(icon: Icon(Icons.space_dashboard_rounded), label: 'Özet'),
       NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: 'Başvurular'),
       NavigationDestination(icon: Icon(Icons.campaign_outlined), label: 'Kampanyalar'),
       NavigationDestination(icon: Icon(Icons.people_alt_outlined), label: 'Kullanıcılar'),
       NavigationDestination(icon: Icon(Icons.local_shipping_outlined), label: 'NFC teslimat'),
-      NavigationDestination(icon: Icon(Icons.payments_outlined), label: 'Paket & ödeme'),
       NavigationDestination(icon: Icon(Icons.tune_rounded), label: 'Ayarlar'),
     ]),
   );
