@@ -70,4 +70,30 @@ void main() {
     expect(find.text('İşletme / kafe adı'), findsOneWidget);
     expect(find.text('Ad Soyad'), findsNothing);
   });
+  test('business analytics counts unique and repeat stamp customers accurately', () {
+    final summary = BusinessAnalyticsSummary.fromRows(
+      events: [
+        {'customer_id': 'a', 'campaign_id': 'c1'},
+        {'customer_id': 'a', 'campaign_id': 'c1'},
+        {'customer_id': 'b', 'campaign_id': 'c2'},
+        {'customer_id': 'c', 'campaign_id': 'c2'},
+        {'customer_id': 'c', 'campaign_id': 'c2'},
+        {'customer_id': 'c', 'campaign_id': 'c2'},
+      ],
+      campaigns: [
+        {'id': 'c1', 'title': 'Kahve', 'is_active': true},
+        {'id': 'c2', 'title': 'Tatlı', 'is_active': false},
+      ],
+      redeemedRewards: 2,
+    );
+    expect(summary.totalStamps, 6);
+    expect(summary.uniqueCustomers, 3);
+    expect(summary.repeatCustomers, 2);
+    expect(summary.redeemedRewards, 2);
+    expect(summary.campaignCount, 2);
+    expect(summary.activeCampaignCount, 1);
+    expect(summary.stampsByCampaign['Kahve'], 2);
+    expect(summary.stampsByCampaign['Tatlı'], 4);
+  });
+
 }
