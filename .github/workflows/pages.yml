@@ -33,13 +33,17 @@ jobs:
           cp index.html public/index.html
           cp yonetim/index.html public/yonetim/index.html
       - name: Configure GitHub Pages
+        id: pages
         uses: actions/configure-pages@v5
+        continue-on-error: true
         with:
           enablement: true
       - name: Upload website
+        if: steps.pages.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
           path: public
       - name: Deploy website
+        if: steps.pages.outcome == 'success'
         id: deployment
         uses: actions/deploy-pages@v4
