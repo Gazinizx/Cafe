@@ -124,6 +124,7 @@ jobs:
               info = plistlib.load(f)
           info["CFBundleDisplayName"] = "Cafe Dünyam"
           info["NFCReaderUsageDescription"] = "Cafe Dünyam sadakat damgası kazanmak için işletmenin NFC etiketini okur."
+          info["NSPhotoLibraryUsageDescription"] = "Cafe Dünyam kampanya kartının arka plan görselini seçebilmek için fotoğraf kitaplığına erişir."
           url_types = info.get("CFBundleURLTypes", [])
           if not any("com.cafedunyam.app" in item.get("CFBundleURLSchemes", []) for item in url_types):
               url_types.append({
