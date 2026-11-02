@@ -1989,7 +1989,6 @@ class _EmployeeShellState extends State<EmployeeShell> {
         const SizedBox(height: 20),
         if (_claims.isEmpty) const Text('Bekleyen ödül talebi yok.'),
         ..._claims.map((claim) {
-          final id = claim['id'].toString();
           final code = (claim['redemption_code'] ?? '').toString();
           final reward = claim['reward_snapshot'] is Map ? Map<String,dynamic>.from(claim['reward_snapshot'] as Map) : <String,dynamic>{};
           final cafe = claim['cafes'] is Map ? Map<String,dynamic>.from(claim['cafes'] as Map) : <String,dynamic>{};
@@ -2642,20 +2641,6 @@ class _AdminCampaignsState extends State<AdminCampaigns> {
     }
   }
 
-  Future<void> _redeem(String claimId) async {
-    try {
-      final response = await cloud.functions.invoke('redeem-cafe-reward', body: {'claimId': claimId}, headers: const {'x-region': 'eu-west-3'});
-      final data = response.data;
-      if (response.status == 200 && data is Map && data['success'] == true) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ödül teslim edildi olarak işaretlendi.')));
-        await _load();
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data is Map ? (data['error'] ?? 'Ödül teslim edilemedi.').toString() : 'Ödül teslim edilemedi.')));
-      }
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül teslim edilemedi: $error')));
-    }
-  }
 
   @override Widget build(BuildContext context) {
     if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
