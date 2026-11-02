@@ -2690,7 +2690,7 @@ class _BusinessSettingsState extends State<BusinessSettings> {
         leading: Icon(branch['is_main_branch'] == true ? Icons.home_work : Icons.storefront, color: forest),
         title: Text(branch['name'].toString()),
         subtitle: Text('${branch['city'] ?? ''} • ${branch['is_active'] == true ? 'Aktif' : 'Pasif'}${branch['is_main_branch'] == true ? ' • Ana şube' : ''}${branch['latitude'] != null && branch['longitude'] != null ? ' • Konum kayıtlı' : ' • Konum eksik'}'),
-        trailing: Wrap(mainAxisSize: MainAxisSize.min, children: [
+        trailing: Row(mainAxisSize: MainAxisSize.min, children: [
           IconButton(tooltip: 'İşletme profilini düzenle', onPressed: () => _editBranchProfile(branch), icon: const Icon(Icons.edit_outlined)),
           IconButton(tooltip: 'Bu şubenin konumunu kaydet', onPressed: () => _saveBranchLocation(branch),
             icon: Icon(Icons.my_location, color: branch['latitude'] != null && branch['longitude'] != null ? forest : brown)),
