@@ -59,7 +59,7 @@ Deno.serve(async (request: Request) => {
     return json(403, { error: "Bu işlem için onaylı müşteri hesabı gerekli." });
   }
 
-  let payload: { url?: string };
+  let payload: { url?: string; campaignId?: string };
   try {
     payload = await request.json();
   } catch {
@@ -126,19 +126,44 @@ Deno.serve(async (request: Request) => {
   }
 
   const receiptReference = `${uid}:${counterHex}`;
-  const { data: stampData, error: stampError } = await admin.rpc("issue_verified_stamp", {
-    p_customer_id: authData.user.id,
-    p_cafe_id: branchId,
-    p_issued_by: tag.business_id,
-    p_receipt_reference: receiptReference,
-    p_nfc_tag_id: tag.id,
-    p_verification_reference: `sdm:${uid}:${counterHex}`,
-    p_read_counter: readCounter,
-  });
+  if (payload.campaignId !== undefined && !/^[0-9a-fA-F-]{36}$/.test(payload.campaignId)) {
+    return json(400, { error: "Geçersiz kampanya seçimi." });
+  }
+
+  const rpcName = payload.campaignId ? "issue_verified_campaign_stamp" : "issue_verified_stamp";
+  const rpcArgs = payload.campaignId
+    ? {
+        p_customer_id: authData.user.id,
+        p_campaign_id: payload.campaignId,
+        p_issued_by: tag.business_id,
+        p_receipt_reference: receiptReference,
+        p_nfc_tag_id: tag.id,
+        p_verification_reference: `sdm:${uid}:${counterHex}`,
+        p_read_counter: readCounter,
+      }
+    : {
+        p_customer_id: authData.user.id,
+        p_cafe_id: branchId,
+        p_issued_by: tag.business_id,
+        p_receipt_reference: receiptReference,
+        p_nfc_tag_id: tag.id,
+        p_verification_reference: `sdm:${uid}:${counterHex}`,
+        p_read_counter: readCounter,
+      };
+  const { data: stampData, error: stampError } = await admin.rpc(rpcName, rpcArgs);
 
   if (stampError) {
     if (stampError.message.toLowerCase().includes("replay")) {
       return json(409, { error: "Bu NFC okutması daha önce kullanılmış." });
+    }
+    if (stampError.message.toLowerCase().includes("has not joined")) {
+      return json(403, { error: "Önce bu kampanyayı Aktif Kampanyalarım alanına eklemelisin." });
+    }
+    if (stampError.message.toLowerCase().includes("different businesses")) {
+      return json(409, { error: "Okuttuğun NFC etiketi seçili kampanyaya ait değil." });
+    }
+    if (stampError.message.toLowerCase().includes("not active")) {
+      return json(409, { error: "Seçili kampanya artık damga kabul etmiyor." });
     }
     return json(400, { error: "Damga işlemi tamamlanamadı. Lütfen kasiyerden yardım iste." });
   }
@@ -150,7 +175,7 @@ Deno.serve(async (request: Request) => {
       success: false,
       duplicate: true,
       stamps: result.new_stamp_count,
-      message: "Aynı işletmede 10 dakika dolmadan tekrar damga alamazsın.",
+      message: "Bu kampanyada 10 dakika dolmadan tekrar damga alamazsın.",
     });
   }
 
@@ -158,6 +183,9 @@ Deno.serve(async (request: Request) => {
     success: true,
     duplicate: false,
     stamps: result.new_stamp_count,
-    message: "Damgan başarıyla eklendi.",
+    rewardReady: result.reward_ready === true,
+    message: result.reward_ready === true
+      ? "Kampanya kartın tamamlandı. Ödülünü talep edebilirsin."
+      : "Damgan başarıyla eklendi.",
   });
 });
