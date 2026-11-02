@@ -23,9 +23,11 @@ Deno.serve(async (request: Request) => {
   const { data: authData, error: authError } = await auth.auth.getUser();
   if (authError || !authData.user) return reply(401, { error: "Oturum doğrulanamadı." });
 
-  let body: { claimId?: string };
+  let body: { claimId?: string; code?: string };
   try { body = await request.json(); } catch { return reply(400, { error: "Geçersiz istek." }); }
-  if (typeof body.claimId !== "string" || !/^[0-9a-fA-F-]{36}$/.test(body.claimId)) return reply(400, { error: "Geçersiz ödül kodu." });
+  const hasClaimId = typeof body.claimId === "string" && /^[0-9a-fA-F-]{36}$/.test(body.claimId);
+  const redemptionCode = typeof body.code === "string" ? body.code.trim().toUpperCase() : "";
+  if (!hasClaimId && !/^[0-9A-F]{12}$/.test(redemptionCode)) return reply(400, { error: "Geçersiz ödül kodu." });
 
   const admin = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: profile, error: profileError } = await admin.from("profiles").select("role,approval_status").eq("id", authData.user.id).maybeSingle();
@@ -39,8 +41,16 @@ Deno.serve(async (request: Request) => {
     return reply(403, { error: "İşletme hesabı henüz onaylanmadı." });
   }
 
+  let claimId = body.claimId;
+  if (!hasClaimId) {
+    const { data: claim, error: claimLookupError } = await admin
+      .from("reward_claims").select("id").eq("redemption_code", redemptionCode).maybeSingle();
+    if (claimLookupError || !claim) return reply(404, { error: "Ödül kodu bulunamadı." });
+    claimId = claim.id;
+  }
+
   const { data, error } = await admin.rpc("redeem_cafe_reward", {
-    p_claim_id: body.claimId,
+    p_claim_id: claimId,
     p_redeemed_by: authData.user.id,
   });
   if (error) {
