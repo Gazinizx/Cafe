@@ -18,7 +18,47 @@ alter table public.campaigns
   add column if not exists background_image_url text;
 
 create table if not exists public.campaign_stamp_icons (
-  icon_key text primary key check (icon_key ~ '^[a-z][a-z0-9_]{1,31}
+  icon_key text primary key check (icon_key ~ '^[a-z][a-z0-9_]{1,31}$'),
+  label text not null check (length(trim(label)) between 1 and 40),
+  icon_name text not null check (icon_name in (
+    'coffee','cake','stamp','pizza','ice_cream','sandwich','star','heart',
+    'burger','tea','cookie','donut','gift','leaf','music','book'
+  )),
+  sort_order integer not null default 100,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now()
+);
+
+insert into public.campaign_stamp_icons(icon_key,label,icon_name,sort_order) values
+  ('coffee','Kahve','coffee',10),
+  ('cake','Pasta / tatlı','cake',20),
+  ('stamp','Damga','stamp',30),
+  ('pizza','Pizza','pizza',40),
+  ('ice_cream','Dondurma','ice_cream',50),
+  ('sandwich','Sandviç','sandwich',60),
+  ('star','Yıldız','star',70),
+  ('heart','Kalp','heart',80)
+on conflict (icon_key) do nothing;
+
+alter table public.campaign_stamp_icons enable row level security;
+grant select, insert, update, delete on public.campaign_stamp_icons to authenticated;
+
+drop policy if exists campaign_stamp_icons_read on public.campaign_stamp_icons;
+create policy campaign_stamp_icons_read on public.campaign_stamp_icons
+for select to authenticated using (true);
+
+drop policy if exists campaign_stamp_icons_admin_manage on public.campaign_stamp_icons;
+create policy campaign_stamp_icons_admin_manage on public.campaign_stamp_icons
+for all to authenticated
+using (private.is_cafe_admin())
+with check (private.is_cafe_admin());
+
+alter table public.campaigns
+  drop constraint if exists campaigns_stamps_required_check,
+  add constraint campaigns_stamps_required_check check (stamps_required between 1 and 100),
+  drop constraint if exists campaigns_stamp_icon_check,
+  add constraint campaigns_stamp_icon_fkey
+    foreign key (stamp_icon) references public.campaign_stamp_icons(icon_key) on delete restrict;
 
 create table if not exists public.campaign_memberships (
   id uuid primary key default gen_random_uuid(),
