@@ -246,7 +246,9 @@ class LocalData {
             'ownerId': r['owner_id'], 'businessId': r['business_id'],
             'address': r['address'], 'district': r['district'],
             'description': r['description'], 'latitude': r['latitude'],
-            'longitude': r['longitude'],
+            'longitude': r['longitude'], 'phone': r['phone'],
+            'websiteUrl': r['website_url'], 'menuUrl': r['menu_url'],
+            'openingHours': r['opening_hours'], 'coverImageUrl': r['cover_image_url'],
           };
         }).toList();
       }
@@ -936,8 +938,15 @@ class CafeDetailPage extends StatelessWidget {
       body: ListView(padding: const EdgeInsets.all(22), children: [
         Container(
           height: 160,
-          decoration: BoxDecoration(color: forest, borderRadius: BorderRadius.circular(22)),
-          child: const Icon(Icons.local_cafe, color: cream, size: 70),
+          decoration: BoxDecoration(
+            color: forest,
+            borderRadius: BorderRadius.circular(22),
+            image: (cafe['coverImageUrl'] ?? '').toString().isNotEmpty
+              ? DecorationImage(image: NetworkImage(cafe['coverImageUrl'].toString()), fit: BoxFit.cover)
+              : null,
+          ),
+          child: (cafe['coverImageUrl'] ?? '').toString().isNotEmpty
+            ? null : const Icon(Icons.local_cafe, color: cream, size: 70),
         ),
         const SizedBox(height: 18),
         Text((cafe['name'] ?? 'İşletme').toString(), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: forest)),
@@ -951,6 +960,26 @@ class CafeDetailPage extends StatelessWidget {
           const SizedBox(height: 16),
           const Text('Adres', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
           Text(address),
+        ],
+        if ((cafe['phone'] ?? '').toString().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('Telefon', style: TextStyle(fontWeight: FontWeight.bold)),
+          SelectableText(cafe['phone'].toString()),
+        ],
+        if ((cafe['openingHours'] ?? '').toString().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('Çalışma saatleri', style: TextStyle(fontWeight: FontWeight.bold)),
+          Text(cafe['openingHours'].toString()),
+        ],
+        if ((cafe['websiteUrl'] ?? '').toString().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('Web sitesi', style: TextStyle(fontWeight: FontWeight.bold)),
+          SelectableText(cafe['websiteUrl'].toString()),
+        ],
+        if ((cafe['menuUrl'] ?? '').toString().isNotEmpty) ...[
+          const SizedBox(height: 12),
+          const Text('Menü', style: TextStyle(fontWeight: FontWeight.bold)),
+          SelectableText(cafe['menuUrl'].toString()),
         ],
         const SizedBox(height: 18),
         const Text('Sadakat ödülü', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
@@ -2486,6 +2515,45 @@ class _BusinessSettingsState extends State<BusinessSettings> {
     }
   }
 
+  Future<void> _editBranchProfile(Map<String,dynamic> branch) async {
+    final phone = TextEditingController(text: (branch['phone'] ?? '').toString());
+    final website = TextEditingController(text: (branch['website_url'] ?? '').toString());
+    final menu = TextEditingController(text: (branch['menu_url'] ?? '').toString());
+    final hours = TextEditingController(text: (branch['opening_hours'] ?? '').toString());
+    final cover = TextEditingController(text: (branch['cover_image_url'] ?? '').toString());
+    final save = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('§{branch['name']} • İşletme profili'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: phone, keyboardType: TextInputType.phone, decoration: const InputDecoration(labelText: 'Telefon')),
+          TextField(controller: website, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Web sitesi')),
+          TextField(controller: menu, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Menü bağlantısı')),
+          TextField(controller: hours, maxLines: 2, decoration: const InputDecoration(labelText: 'Çalışma saatleri', hintText: 'Her gün 09:00 - 22:00')),
+          TextField(controller: cover, keyboardType: TextInputType.url, decoration: const InputDecoration(labelText: 'Kapak görseli URL')),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Kaydet')),
+        ],
+      ),
+    );
+    if (save == true) {
+      try {
+        await cloud.from('cafes').update({
+          'phone': phone.text.trim(), 'website_url': website.text.trim(),
+          'menu_url': menu.text.trim(), 'opening_hours': hours.text.trim(),
+          'cover_image_url': cover.text.trim(),
+        }).eq('id', branch['id']);
+        await _load();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('İşletme profili güncellendi.')));
+      } catch (error) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Profil güncellenemedi: $error')));
+      }
+    }
+    phone.dispose(); website.dispose(); menu.dispose(); hours.dispose(); cover.dispose();
+  }
+
   Future<void> _saveBranchLocation(Map<String,dynamic> branch) async {
     try {
       var permission = await Geolocator.checkPermission();
@@ -2601,8 +2669,11 @@ class _BusinessSettingsState extends State<BusinessSettings> {
         leading: Icon(branch['is_main_branch'] == true ? Icons.home_work : Icons.storefront, color: forest),
         title: Text(branch['name'].toString()),
         subtitle: Text('${branch['city'] ?? ''} • ${branch['is_active'] == true ? 'Aktif' : 'Pasif'}${branch['is_main_branch'] == true ? ' • Ana şube' : ''}${branch['latitude'] != null && branch['longitude'] != null ? ' • Konum kayıtlı' : ' • Konum eksik'}'),
-        trailing: IconButton(tooltip: 'Bu şubenin konumunu kaydet', onPressed: () => _saveBranchLocation(branch),
-          icon: Icon(Icons.my_location, color: branch['latitude'] != null && branch['longitude'] != null ? forest : brown)),
+        trailing: Wrap(mainAxisSize: MainAxisSize.min, children: [
+          IconButton(tooltip: 'İşletme profilini düzenle', onPressed: () => _editBranchProfile(branch), icon: const Icon(Icons.edit_outlined)),
+          IconButton(tooltip: 'Bu şubenin konumunu kaydet', onPressed: () => _saveBranchLocation(branch),
+            icon: Icon(Icons.my_location, color: branch['latitude'] != null && branch['longitude'] != null ? forest : brown)),
+        ]),
       ))),
       const SizedBox(height: 8),
       TextField(controller: _branchName, decoration: const InputDecoration(labelText: 'Yeni şube adı')),
