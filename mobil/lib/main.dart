@@ -2279,22 +2279,6 @@ class AdminDashboard extends StatelessWidget {
         const Heading('Yönetim kısayolları', 'Sık kullanılan işlemlere hızlı erişim.'),
         Card(child: ListTile(leading: const Icon(Icons.fact_check, color: brown), title: const Text('Başvuruları incele'), subtitle: Text('$pending başvuru inceleme bekliyor'), trailing: const Icon(Icons.chevron_right), onTap: () => onNavigate(1))),
         Card(child: ListTile(leading: const Icon(Icons.campaign, color: brown), title: const Text('Kampanya denetimi'), subtitle: Text('$active aktif kampanya'), trailing: const Icon(Icons.chevron_right), onTap: () => onNavigate(2))),
-        const SizedBox(height: 24),
-        const Heading('Damga simgesi kütüphanesi', 'İşletmeler yalnızca burada etkinleştirilen hazır simgeleri kullanabilir.'),
-        Align(alignment: Alignment.centerRight, child: FilledButton.icon(
-          onPressed: _addIcon,
-          icon: const Icon(Icons.add),
-          label: const Text('Hazır simge ekle'),
-        )),
-        if (_iconsLoading) const Center(child: CircularProgressIndicator()),
-        if (!_iconsLoading && _icons.isEmpty) const Text('Henüz damga simgesi bulunamadı.'),
-        ..._icons.map((icon) => Card(child: SwitchListTile(
-          secondary: CircleAvatar(backgroundColor: cream, child: Icon(campaignStampIcon(icon['icon_name']?.toString()), color: forest)),
-          title: Text(icon['label'].toString()),
-          subtitle: Text(icon['is_active'] == true ? 'İşletmeler seçebilir' : 'İşletmeler için kapalı'),
-          value: icon['is_active'] == true,
-          onChanged: (_) => _toggleIcon(icon),
-        ))),
         const LocalModeNote(),
       ]);
     },
@@ -2941,6 +2925,22 @@ class _AdminCampaignsState extends State<AdminCampaigns> {
             Padding(padding: const EdgeInsets.all(14), child: Text('${d['benefit']}')),
           ]));
         }),
+        const SizedBox(height: 24),
+        const Heading('Damga simgesi kütüphanesi', 'İşletmeler yalnızca burada etkinleştirilen hazır simgeleri kullanabilir.'),
+        Align(alignment: Alignment.centerRight, child: FilledButton.icon(
+          onPressed: _addIcon,
+          icon: const Icon(Icons.add),
+          label: const Text('Hazır simge ekle'),
+        )),
+        if (_iconsLoading) const Center(child: CircularProgressIndicator()),
+        if (!_iconsLoading && _icons.isEmpty) const Text('Henüz damga simgesi bulunamadı.'),
+        ..._icons.map((icon) => Card(child: SwitchListTile(
+          secondary: CircleAvatar(backgroundColor: cream, child: Icon(campaignStampIcon(icon['icon_name']?.toString()), color: forest)),
+          title: Text(icon['label'].toString()),
+          subtitle: Text(icon['is_active'] == true ? 'İşletmeler seçebilir' : 'İşletmeler için kapalı'),
+          value: icon['is_active'] == true,
+          onChanged: (_) => _toggleIcon(icon),
+        ))),
         const LocalModeNote(),
       ]);
     },
