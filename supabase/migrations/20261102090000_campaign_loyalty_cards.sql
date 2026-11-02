@@ -83,6 +83,12 @@ with check (
       and f.is_active
       and (c.starts_at is null or c.starts_at <= now())
       and (c.ends_at is null or c.ends_at > now())
+      and exists (
+        select 1 from public.profiles business_profile
+        where business_profile.id = f.business_id
+          and business_profile.role = 'business'
+          and business_profile.approval_status = 'approved'
+      )
   )
   and exists (
     select 1 from public.profiles p
