@@ -3576,6 +3576,3 @@ class _AdminCampaignsState extends State<AdminCampaigns> {
     },
   );
 }
-).hasMatch(token) ? token : null;
-}
-
