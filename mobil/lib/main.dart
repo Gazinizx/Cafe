@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:nfc_manager/nfc_manager.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -240,7 +243,10 @@ class LocalData {
             'type': r['category'] ?? 'Kafe', 'goal': goal,
             'reward': rewardActive ? (reward['reward_title'] ?? 'Ödül') : 'Ödül henüz tanımlanmadı',
             'active': r['is_active'] == true,
-            'ownerId': r['owner_id'], 'businessId': r['business_id'], 'address': r['address'],
+            'ownerId': r['owner_id'], 'businessId': r['business_id'],
+            'address': r['address'], 'district': r['district'],
+            'description': r['description'], 'latitude': r['latitude'],
+            'longitude': r['longitude'],
           };
         }).toList();
       }
@@ -749,19 +755,28 @@ class CustomerShell extends StatefulWidget {
 }
 class _CustomerShellState extends State<CustomerShell> {
   int tab=0;
-  @override Widget build(BuildContext context)=>Scaffold(body:SafeArea(child:IndexedStack(index:tab,children:[
-    CustomerHome(user:widget.user,openTab:(i)=>setState(()=>tab=i)),
-    ExplorePage(),
-    CustomerCards(),
-    CustomerDeals(onJoined: () => setState(() => tab = 2)),
-    ProfilePage(user:widget.user),
-  ])),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const[
-    NavigationDestination(icon:Icon(Icons.home_outlined),label:'Ana Sayfa'),
-    NavigationDestination(icon:Icon(Icons.storefront_outlined),label:'Kafeler'),
-    NavigationDestination(icon:Icon(Icons.loyalty_outlined),label:'Aktif Kampanyalarım'),
-    NavigationDestination(icon:Icon(Icons.local_offer_outlined),label:'Kampanyalar'),
-    NavigationDestination(icon:Icon(Icons.person_outline),label:'Profil'),
-  ]));
+  @override Widget build(BuildContext context)=>Scaffold(
+    appBar: AppBar(
+      title: const Text('Cafe Dünyam'),
+      actions: [IconButton(
+        tooltip: 'Bildirimler',
+        icon: const Icon(Icons.notifications_none),
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => NotificationInboxPage(user: widget.user))),
+      )],
+    ),
+    body:SafeArea(child:IndexedStack(index:tab,children:[
+      CustomerHome(user:widget.user,openTab:(i)=>setState(()=>tab=i)),
+      ExplorePage(),
+      CustomerCards(),
+      CustomerDeals(onJoined: () => setState(() => tab = 2)),
+      ProfilePage(user:widget.user),
+    ])),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const[
+      NavigationDestination(icon:Icon(Icons.home_outlined),label:'Ana Sayfa'),
+      NavigationDestination(icon:Icon(Icons.storefront_outlined),label:'Kafeler'),
+      NavigationDestination(icon:Icon(Icons.loyalty_outlined),label:'Aktif Kampanyalarım'),
+      NavigationDestination(icon:Icon(Icons.local_offer_outlined),label:'Kampanyalar'),
+      NavigationDestination(icon:Icon(Icons.person_outline),label:'Profil'),
+    ]));
 }
 
 class Heading extends StatelessWidget {
@@ -802,35 +817,211 @@ class CafePreviewList extends StatelessWidget {
  });
 }
 
-class ExplorePage extends StatefulWidget { const ExplorePage({super.key}); @override State<ExplorePage> createState()=>_ExplorePageState(); }
-class _ExplorePageState extends State<ExplorePage>{
- String query='',city='Tümü';
- @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
- const Heading('Kafeleri keşfet','Şehir veya kafe adına göre ara.'),
- TextField(onChanged:(v)=>setState(()=>query=v),decoration:const InputDecoration(prefixIcon:Icon(Icons.search),hintText:'Kafe ara',filled:true,fillColor:Colors.white)),
- const SizedBox(height:10),
- FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(cafesKey,starterCafes),builder:(context,s){
- if(s.hasError)return Center(child:Text('Kafeler yüklenemedi: ${s.error}'));
- if(!s.hasData)return const Center(child:CircularProgressIndicator());
- final cities=['Tümü',...s.data!.map((e)=>'${e['city']}').toSet()];
- final matches=s.data!.where((c)=>(city=='Tümü'||c['city']==city)&&('${c['name']} ${c['type']} ${c['city']}'.toLowerCase().contains(query.toLowerCase()))).toList();
- return Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
- Wrap(spacing:6,children:cities.map((v)=>ChoiceChip(label:Text(v),selected:city==v,onSelected:(_)=>setState(()=>city=v))).toList()),
- const SizedBox(height:8),if(matches.isEmpty)const Text('Aramana uygun kafe bulunamadı.'),
- ...matches.map((c)=>Card(child:ListTile(leading:const CircleAvatar(backgroundColor:cream,child:Icon(Icons.coffee,color:forest)),title:Text('${c['name']}'),subtitle:Text('${c['city']} • ${c['type']}'),onTap:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>CafeDetailPage(cafe:c)))))),
- ]);
- }),
- ]);
+
+class ExplorePage extends StatefulWidget {
+  const ExplorePage({super.key});
+  @override State<ExplorePage> createState() => _ExplorePageState();
+}
+class _ExplorePageState extends State<ExplorePage> {
+  String query = '', city = 'Tümü';
+  Set<String> _favorites = {};
+  bool _loadingFavorites = true;
+
+  @override void initState() { super.initState(); _loadFavorites(); }
+
+  Future<void> _loadFavorites() async {
+    try {
+      final userId = cloud.auth.currentUser?.id;
+      if (userId == null) return;
+      final rows = await cloud.from('favorite_cafes').select('cafe_id').eq('customer_id', userId);
+      if (mounted) setState(() => _favorites = (rows as List).map((r) => r['cafe_id'].toString()).toSet());
+    } catch (_) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Favoriler yüklenemedi. İnternet bağlantını kontrol et.')));
+    } finally {
+      if (mounted) setState(() => _loadingFavorites = false);
+    }
+  }
+
+  Future<void> _toggleFavorite(String cafeId) async {
+    final userId = cloud.auth.currentUser?.id;
+    if (userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Favori eklemek için giriş yapmalısın.')));
+      return;
+    }
+    final wasFavorite = _favorites.contains(cafeId);
+    setState(() {
+      if (wasFavorite) { _favorites.remove(cafeId); } else { _favorites.add(cafeId); }
+    });
+    try {
+      if (wasFavorite) {
+        await cloud.from('favorite_cafes').delete().eq('customer_id', userId).eq('cafe_id', cafeId);
+      } else {
+        await cloud.from('favorite_cafes').insert({'customer_id': userId, 'cafe_id': cafeId});
+      }
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        if (wasFavorite) { _favorites.add(cafeId); } else { _favorites.remove(cafeId); }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Favori güncellenemedi: $error')));
+    }
+  }
+
+  @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
+    const Heading('Kafeleri keşfet', 'Yakınındaki işletmeleri bul, favorilerine ekle ve sadakat fırsatlarını keşfet.'),
+    TextField(
+      onChanged: (value) => setState(() => query = value),
+      decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Kafe, kategori veya şehir ara', filled: true, fillColor: Colors.white),
+    ),
+    const SizedBox(height: 10),
+    FutureBuilder<List<Map<String,dynamic>>>(
+      future: LocalData.list(cafesKey, starterCafes),
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text(snapshot.error.toString().toLowerCase().contains('socket') ? 'Ağ bağlantısı yok.' : 'Kafeler yüklenemedi: ${snapshot.error}'));
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final cafes = snapshot.data!.where((c) => c['active'] == true).toList();
+        final cities = ['Tümü', ...cafes.map((c) => (c['city'] ?? '').toString()).where((v) => v.isNotEmpty).toSet()];
+        final matches = cafes.where((c) {
+          final matchesCity = city == 'Tümü' || c['city'] == city;
+          final text = '${c['name']} ${c['type']} ${c['city']} ${c['district']}';
+          return matchesCity && text.toLowerCase().contains(query.toLowerCase());
+        }).toList()
+          ..sort((a, b) {
+            final af = _favorites.contains(a['id'].toString());
+            final bf = _favorites.contains(b['id'].toString());
+            if (af != bf) return af ? -1 : 1;
+            return (a['name'] ?? '').toString().compareTo((b['name'] ?? '').toString());
+          });
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Wrap(spacing: 6, children: cities.map((value) => ChoiceChip(
+            label: Text(value), selected: city == value,
+            onSelected: (_) => setState(() => city = value),
+          )).toList()),
+          const SizedBox(height: 8),
+          if (_loadingFavorites) const LinearProgressIndicator(),
+          if (matches.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Aramana uygun aktif işletme bulunamadı.')),
+          ...matches.map((cafe) {
+            final id = cafe['id'].toString();
+            final favorite = _favorites.contains(id);
+            final address = [cafe['district'], cafe['city']].where((v) => v != null && v.toString().isNotEmpty).join(' • ');
+            return Card(
+              child: ListTile(
+                leading: const CircleAvatar(backgroundColor: cream, child: Icon(Icons.coffee, color: forest)),
+                title: Text((cafe['name'] ?? 'İşletme').toString(), style: const TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: Text(address.isEmpty ? (cafe['type'] ?? 'Kafe').toString() : '${cafe['type']} • $address'),
+                trailing: IconButton(
+                  tooltip: favorite ? 'Favorilerden çıkar' : 'Favorilere ekle',
+                  onPressed: () => _toggleFavorite(id),
+                  icon: Icon(favorite ? Icons.favorite : Icons.favorite_border, color: favorite ? Colors.redAccent : forest),
+                ),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => CafeDetailPage(cafe: cafe))),
+              ),
+            );
+          }),
+        ]);
+      },
+    ),
+  ]);
 }
 
-class CafeDetailPage extends StatelessWidget{
- final Map<String,dynamic> cafe;const CafeDetailPage({required this.cafe,super.key});
- @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Kafe detayları')),body:ListView(padding:const EdgeInsets.all(22),children:[
- Container(height:150,decoration:BoxDecoration(color:forest,borderRadius:BorderRadius.circular(22)),child:const Icon(Icons.local_cafe,color:cream,size:70)),
- const SizedBox(height:18),Text('${cafe['name']}',style:const TextStyle(fontSize:28,fontWeight:FontWeight.w900,color:forest)),Text('${cafe['city']} • ${cafe['type']}'),
- const SizedBox(height:18),const Text('Sadakat ödülü',style:TextStyle(fontSize:20,fontWeight:FontWeight.bold)),Text('${cafe['reward']}'),
- const SizedBox(height:16),const LocalModeNote(),
- ]));
+class CafeDetailPage extends StatelessWidget {
+  final Map<String,dynamic> cafe;
+  const CafeDetailPage({required this.cafe, super.key});
+  @override Widget build(BuildContext context) {
+    final address = [cafe['address'], cafe['district'], cafe['city']]
+      .where((v) => v != null && v.toString().trim().isNotEmpty).join(', ');
+    final description = (cafe['description'] ?? '').toString().trim();
+    return Scaffold(
+      appBar: AppBar(title: const Text('İşletme profili')),
+      body: ListView(padding: const EdgeInsets.all(22), children: [
+        Container(
+          height: 160,
+          decoration: BoxDecoration(color: forest, borderRadius: BorderRadius.circular(22)),
+          child: const Icon(Icons.local_cafe, color: cream, size: 70),
+        ),
+        const SizedBox(height: 18),
+        Text((cafe['name'] ?? 'İşletme').toString(), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: forest)),
+        Text('${cafe['city'] ?? ''} • ${cafe['type'] ?? 'Kafe'}'),
+        if (description.isNotEmpty) ...[
+          const SizedBox(height: 18),
+          const Text('Hakkında', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(description),
+        ],
+        if (address.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text('Adres', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+          Text(address),
+        ],
+        const SizedBox(height: 18),
+        const Text('Sadakat ödülü', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold)),
+        Text((cafe['reward'] ?? 'Ödül henüz tanımlanmadı').toString()),
+        const SizedBox(height: 16),
+        const LocalModeNote(),
+      ]),
+    );
+  }
+}
+
+class NotificationInboxPage extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const NotificationInboxPage({required this.user, super.key});
+  @override State<NotificationInboxPage> createState() => _NotificationInboxPageState();
+}
+class _NotificationInboxPageState extends State<NotificationInboxPage> {
+  late Future<List<Map<String,dynamic>>> _future;
+  @override void initState() { super.initState(); _future = _load(); }
+  Future<List<Map<String,dynamic>>> _load() async {
+    final rows = await cloud.from('user_notifications').select()
+      .eq('user_id', cloud.auth.currentUser!.id)
+      .order('created_at', ascending: false).limit(60);
+    return (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+  }
+  Future<void> _markRead(String id) async {
+    await cloud.from('user_notifications').update({'read_at': DateTime.now().toUtc().toIso8601String()})
+      .eq('id', id).isFilter('read_at', null);
+    if (mounted) setState(() => _future = _load());
+  }
+  @override Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Bildirimler')),
+    body: FutureBuilder<List<Map<String,dynamic>>>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) return Center(child: Text('Bildirimler yüklenemedi: ${snapshot.error}'));
+        if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+        final items = snapshot.data!;
+        if (items.isEmpty) return const Center(child: Text('Henüz bildirimin yok.'));
+        return RefreshIndicator(
+          onRefresh: () async => setState(() => _future = _load()),
+          child: ListView.separated(
+            padding: const EdgeInsets.all(16),
+            itemCount: items.length,
+            separatorBuilder: (_, __) => const Divider(height: 1),
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final unread = item['read_at'] == null;
+              final date = DateTime.tryParse(item['created_at']?.toString() ?? '')?.toLocal();
+              final dateText = date == null ? '' : '${date.day.toString().padLeft(2, '0')}.${date.month.toString().padLeft(2, '0')}.${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: unread ? gold.withOpacity(.25) : cream,
+                  child: Icon(
+                    item['notification_type'] == 'reward' ? Icons.card_giftcard :
+                    item['notification_type'] == 'campaign_join' ? Icons.person_add_alt_1 :
+                    Icons.local_activity_outlined,
+                    color: forest,
+                  ),
+                ),
+                title: Text((item['title'] ?? 'Bildirim').toString(), style: TextStyle(fontWeight: unread ? FontWeight.w900 : FontWeight.w600)),
+                subtitle: Text('${item['body'] ?? ''}${dateText.isEmpty ? '' : '\n$dateText'}'),
+                trailing: unread ? const Icon(Icons.circle, color: gold, size: 10) : const Icon(Icons.check, color: Colors.grey),
+                onTap: unread ? () => _markRead(item['id'].toString()) : null,
+              );
+            },
+          ),
+        );
+      },
+    ),
+  );
 }
 
 const campaignStampIconCatalog = <String, Map<String, dynamic>>{
@@ -1201,7 +1392,28 @@ class _CampaignCardDetailState extends State<CampaignCardDetail> {
         else if (_stamps >= _goal)
           FilledButton.icon(onPressed: _claiming ? null : _claimReward, icon: const Icon(Icons.card_giftcard), label: Text(_claiming ? 'Kod hazırlanıyor…' : 'Ödülümü Al'))
         else
-          FilledButton.icon(onPressed: _scanning ? null : _scanNfc, icon: const Icon(Icons.nfc), label: Text(_scanning ? 'Etiketi okut...' : 'Seçili kampanya için NFC okut')),
+          Column(children: [
+            SizedBox(width: double.infinity, child: FilledButton.icon(
+              onPressed: _scanning ? null : _scanNfc,
+              icon: const Icon(Icons.nfc),
+              label: Text(_scanning ? 'Etiketi okut...' : 'Seçili kampanya için NFC okut'),
+            )),
+            const SizedBox(height: 8),
+            SizedBox(width: double.infinity, child: OutlinedButton.icon(
+              onPressed: _scanning ? null : () async {
+                if (!_campaignActive || _issuedClaim != null || _stamps >= _goal) return;
+                final success = await Navigator.push<bool>(context, MaterialPageRoute(
+                  builder: (_) => CampaignQrScannerPage(campaignId: _campaignId),
+                ));
+                if (success == true) {
+                  _message('QR damgan başarıyla eklendi.');
+                  await _load();
+                }
+              },
+              icon: const Icon(Icons.qr_code_scanner),
+              label: const Text('Seçili kampanya için QR okut'),
+            )),
+          ]),
         if (!_campaignActive) const Padding(padding: EdgeInsets.only(top: 8), child: Text('Bu kampanya sona erdi. Kazandığın damgalar korunur.', style: TextStyle(color: Colors.deepOrange))),
         const SizedBox(height: 22),
         const Text('Damga geçmişi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
@@ -1545,19 +1757,150 @@ class _BusinessAnalyticsState extends State<BusinessAnalytics> {
 class BusinessShell extends StatefulWidget{final Map<String,dynamic> user;const BusinessShell({required this.user,super.key});@override State<BusinessShell> createState()=>_BusinessShellState();}
 class _BusinessShellState extends State<BusinessShell>{
  int tab=0;
- @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Cafe Dünyam • İşletme')),body:SafeArea(child:IndexedStack(index:tab,children:[
+ @override Widget build(BuildContext context)=>Scaffold(
+ appBar:AppBar(title:const Text('Cafe Dünyam • İşletme'),actions:[
+ IconButton(tooltip:'Bildirimler',icon:const Icon(Icons.notifications_none),onPressed:()=>Navigator.push(context,MaterialPageRoute(builder:(_)=>NotificationInboxPage(user:widget.user))))
+ ]),
+ body:SafeArea(child:IndexedStack(index:tab,children:[
  BusinessDashboard(user:widget.user),
  BusinessDeals(user:widget.user),
  BusinessAnalytics(user:widget.user),
+ BusinessQrPage(user:widget.user),
  BusinessRewardSettings(user:widget.user),
  BusinessSettings(user:widget.user),
  ])),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const[
  NavigationDestination(icon:Icon(Icons.dashboard_outlined),label:'Panel'),
  NavigationDestination(icon:Icon(Icons.campaign_outlined),label:'Kampanyalar'),
  NavigationDestination(icon:Icon(Icons.insights_outlined),label:'İstatistik'),
+ NavigationDestination(icon:Icon(Icons.qr_code_2),label:'QR Damga'),
  NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),label:'Ödül'),
  NavigationDestination(icon:Icon(Icons.storefront_outlined),label:'İşletmem'),
  ]));
+}
+
+
+class BusinessQrPage extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const BusinessQrPage({required this.user, super.key});
+  @override State<BusinessQrPage> createState() => _BusinessQrPageState();
+}
+class _BusinessQrPageState extends State<BusinessQrPage> {
+  List<Map<String,dynamic>> _branches = [];
+  String? _branchId, _token, _expiresAt;
+  bool _loading = true, _generating = false;
+  @override void initState() { super.initState(); _loadBranches(); }
+  Future<void> _loadBranches() async {
+    try {
+      final rows = await cloud.from('cafes').select('id,name,is_main_branch')
+        .eq('business_id', widget.user['id']).eq('is_active', true)
+        .order('is_main_branch', ascending: false).order('created_at', ascending: true);
+      _branches = (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      if (_branches.isNotEmpty) _branchId = _branches.first['id'].toString();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Şubeler yüklenemedi: $error')));
+    } finally { if (mounted) setState(() => _loading = false); }
+  }
+  Future<void> _generate() async {
+    if (_branchId == null || _generating) return;
+    setState(() { _generating = true; _token = null; _expiresAt = null; });
+    try {
+      final response = await cloud.functions.invoke('campaign-qr',
+        body: {'action': 'issue', 'branchId': _branchId},
+        headers: const {'x-region': 'eu-west-3'});
+      final data = response.data;
+      if (response.status != 200 || data is! Map || data['success'] != true) {
+        throw Exception(data is Map ? (data['error'] ?? 'QR oluşturulamadı.') : 'QR oluşturulamadı.');
+      }
+      if (mounted) setState(() { _token = data['token']?.toString(); _expiresAt = data['expiresAt']?.toString(); });
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().replaceFirst('Exception: ', ''))));
+    } finally { if (mounted) setState(() => _generating = false); }
+  }
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return ListView(padding: const EdgeInsets.all(20), children: [
+      const Heading('QR ile damga', 'Müşteri kartını seçip bu ekrandaki QR kodu okutarak damga alabilir.'),
+      if (_branches.isEmpty) const Text('QR kullanmak için önce aktif bir şube oluşturmalısın.'),
+      if (_branches.isNotEmpty) DropdownButtonFormField<String>(
+        value: _branchId,
+        decoration: const InputDecoration(labelText: 'Şube'),
+        items: _branches.map((b) => DropdownMenuItem(
+          value: b['id'].toString(), child: Text((b['name'] ?? 'Şube').toString()),
+        )).toList(),
+        onChanged: (value) => setState(() { _branchId = value; _token = null; _expiresAt = null; }),
+      ),
+      const SizedBox(height: 16),
+      FilledButton.icon(
+        onPressed: _generating || _branches.isEmpty ? null : _generate,
+        icon: const Icon(Icons.qr_code_2),
+        label: Text(_generating ? 'Güvenli kod hazırlanıyor…' : 'Yeni QR kod oluştur'),
+      ),
+      if (_token != null) ...[
+        const SizedBox(height: 18),
+        Card(child: Padding(padding: const EdgeInsets.all(18), child: Column(children: [
+          QrImageView(data: 'CDQR:' + _token!, version: QrVersions.auto, size: 240, backgroundColor: Colors.white),
+          const SizedBox(height: 12),
+          const Text('Bu kod 90 saniye geçerlidir ve yalnızca bir kez kullanılabilir.', textAlign: TextAlign.center, style: TextStyle(fontWeight: FontWeight.w700)),
+          if (_expiresAt != null) Text('Son kullanım: ${DateTime.parse(_expiresAt!).toLocal()}'),
+          const SizedBox(height: 8),
+          const Text('Müşterinin önce kendi Aktif Kampanyalarım ekranından doğru kartı seçtiğinden emin ol.', textAlign: TextAlign.center),
+        ]))),
+      ],
+      const SizedBox(height: 12),
+      const Text('Güvenlik: QR kod her seferinde sunucudan üretilir, 90 saniyede sona erer ve ikinci kez kullanılamaz. Ekran görüntüsüyle tekrar damga alınamaz.'),
+    ]);
+  }
+}
+
+class CampaignQrScannerPage extends StatefulWidget {
+  final String campaignId;
+  const CampaignQrScannerPage({required this.campaignId, super.key});
+  @override State<CampaignQrScannerPage> createState() => _CampaignQrScannerPageState();
+}
+class _CampaignQrScannerPageState extends State<CampaignQrScannerPage> {
+  bool _handled = false;
+  String? _message;
+  Future<void> _handle(String? raw) async {
+    if (_handled || raw == null || !raw.startsWith('CDQR:')) return;
+    final token = raw.substring(5);
+    if (!RegExp(r'^[0-9a-f]{64}$').hasMatch(token)) {
+      setState(() => _message = 'Bu Cafe Dünyam QR kodu değil.');
+      return;
+    }
+    setState(() { _handled = true; _message = 'QR kod doğrulanıyor…'; });
+    try {
+      final response = await cloud.functions.invoke('campaign-qr',
+        body: {'action': 'redeem', 'token': token, 'campaignId': widget.campaignId},
+        headers: const {'x-region': 'eu-west-3'});
+      final data = response.data;
+      if (response.status != 200 || data is! Map) {
+        throw Exception(data is Map ? (data['error'] ?? 'QR doğrulanamadı.') : 'QR doğrulanamadı.');
+      }
+      if (data['success'] == true) {
+        if (mounted) Navigator.pop(context, true);
+        return;
+      }
+      if (mounted) setState(() { _handled = false; _message = (data['message'] ?? data['error'] ?? 'QR kabul edilmedi.').toString(); });
+    } catch (error) {
+      if (mounted) setState(() { _handled = false; _message = error.toString().replaceFirst('Exception: ', ''); });
+    }
+  }
+  @override Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('QR kodu okut')),
+    body: Stack(children: [
+      MobileScanner(
+        onDetect: (capture) {
+          if (capture.barcodes.isEmpty) return;
+          _handle(capture.barcodes.first.rawValue);
+        },
+      ),
+      Align(alignment: Alignment.bottomCenter, child: Container(
+        width: double.infinity, color: Colors.black87,
+        padding: const EdgeInsets.all(18),
+        child: Text(_message ?? 'İşletmenin Cafe Dünyam QR kodunu kamera çerçevesine getir.', style: const TextStyle(color: Colors.white), textAlign: TextAlign.center),
+      )),
+    ]),
+  );
 }
 
 class BusinessRewardSettings extends StatefulWidget {
