@@ -885,7 +885,7 @@ class _CustomerCardsState extends State<CustomerCards> {
                   const SizedBox(height: 4),
                   Text((campaign['title'] ?? 'Sadakat kartı').toString(), style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w900)),
                   const SizedBox(height: 14),
-                  Wrap(spacing: 9, runSpacing: 9, children: List.generate(goal.clamp(1, 20), (i) => Container(
+                  Wrap(spacing: 9, runSpacing: 9, children: List.generate(goal.clamp(1, 20).toInt(), (i) => Container(
                     width: 36, height: 36,
                     decoration: BoxDecoration(color: i < stamps ? gold : Colors.white.withOpacity(.15), shape: BoxShape.circle, border: Border.all(color: Colors.white70)),
                     child: Icon(campaignStampIcon(campaign['stamp_icon']?.toString()), size: 19, color: i < stamps ? forest : Colors.white),
@@ -1072,7 +1072,7 @@ class _CampaignCardDetailState extends State<CampaignCardDetail> {
             const SizedBox(height: 8),
             Text((widget.campaign['reward_title'] ?? 'Ödül').toString(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
             const SizedBox(height: 18),
-            Wrap(spacing: 10, runSpacing: 10, children: List.generate(_goal.clamp(1, 20), (i) => Container(
+            Wrap(spacing: 10, runSpacing: 10, children: List.generate(_goal.clamp(1, 20).toInt(), (i) => Container(
               width: 42, height: 42,
               decoration: BoxDecoration(color: i < _stamps ? gold : Colors.white.withOpacity(.16), shape: BoxShape.circle, border: Border.all(color: Colors.white70)),
               child: Icon(campaignStampIcon(widget.campaign['stamp_icon']?.toString()), color: i < _stamps ? forest : Colors.white),
@@ -1271,12 +1271,13 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
   final _goal = TextEditingController(text: '8');
   final _title = TextEditingController();
   final _description = TextEditingController();
+  final _redemptionCode = TextEditingController();
   bool _loading = true, _saving = false, _active = true;
   List<Map<String,dynamic>> _branches = [];
   String? _selectedCafeId;
 
   @override void initState() { super.initState(); _load(); }
-  @override void dispose() { _goal.dispose(); _title.dispose(); _description.dispose(); super.dispose(); }
+  @override void dispose() { _goal.dispose(); _title.dispose(); _description.dispose(); _redemptionCode.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     try {
@@ -1329,13 +1330,1320 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
   }
 
   Future<List<Map<String,dynamic>>> _pendingClaims() async {
-    final cafeId = _selectedCafeId;
-    if (cafeId == null) return [];
+    final cafeIds = _branches.map((b) => b['id'].toString()).toList();
+    if (cafeIds.isEmpty) return [];
     final rows = await cloud.from('reward_claims')
-      .select('id,stamps_spent,reward_snapshot,created_at')
-      .eq('cafe_id', cafeId).eq('status', 'issued')
+      .select('id,campaign_id,redemption_code,stamps_spent,reward_snapshot,created_at')
+      .inFilter('cafe_id', cafeIds).eq('status', 'issued')
       .order('created_at', ascending: false);
     return (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+  }
+
+  Future<void> _redeemCode() async {
+    final code = _redemptionCode.text.trim().toUpperCase();
+    if (!RegExp(r'^[0-9A-F]{12}
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return ListView(padding: const EdgeInsets.all(20), children: [
+      const Heading('Ödül Ver', 'Müşterinin oluşturduğu tek kullanımlık ödül kodunu gir.'),
+      TextField(
+        controller: _redemptionCode,
+        textCapitalization: TextCapitalization.characters,
+        maxLength: 12,
+        decoration: const InputDecoration(labelText: 'Müşterinin ödül kodu', hintText: '12 karakterli kod'),
+      ),
+      const SizedBox(height: 8),
+      FilledButton.icon(
+        onPressed: _saving ? null : _redeemCode,
+        icon: const Icon(Icons.card_giftcard),
+        label: const Text('Ödül Verildi olarak işaretle'),
+      ),
+      const SizedBox(height: 24),
+      const Text('Bekleyen ödüller', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      FutureBuilder<List<Map<String,dynamic>>>(
+        future: _pendingClaims(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
+          if (snapshot.hasError) return Text('Ödül talepleri yüklenemedi: ${snapshot.error}');
+          final claims = snapshot.data ?? [];
+          if (claims.isEmpty) return const Padding(padding: EdgeInsets.only(top: 8), child: Text('Bekleyen ödül yok.'));
+          return Column(children: claims.map((claim) {
+            final id = claim['id'].toString();
+            final reward = claim['reward_snapshot'] is Map ? Map<String,dynamic>.from(claim['reward_snapshot'] as Map) : <String,dynamic>{};
+            return Card(child: ListTile(
+              title: Text((reward['title'] ?? 'Ödül talebi').toString()),
+              subtitle: Text('Kod: ${claim['redemption_code'] ?? ''} • ${claim['stamps_spent'] ?? 0} damga'),
+              trailing: TextButton(onPressed: () => _redeem(id), child: const Text('Teslim edildi')),
+            ));
+          }).toList());
+        },
+      ),
+    ]);
+  }
+}
+class BusinessBilling extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const BusinessBilling({required this.user, super.key});
+  @override State<BusinessBilling> createState() => _BusinessBillingState();
+}
+class _BusinessBillingState extends State<BusinessBilling> {
+  List<Map<String,dynamic>> _packages = [];
+  List<Map<String,dynamic>> _payments = [];
+  List<Map<String,dynamic>> _subscriptions = [];
+  String? _selectedPackage;
+  String _method = 'cash';
+  bool _loading = true, _requesting = false;
+  String? _loadError;
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    _loadError = null;
+    try {
+      final packageRows = await cloud.from('subscription_packages').select().eq('is_active', true).order('price_try');
+      final paymentRows = await cloud.from('manual_payments').select('*, subscription_packages(name,billing_period)')
+        .eq('business_id', widget.user['id']).order('created_at', ascending: false);
+      final subscriptionRows = await cloud.from('business_subscriptions').select('*, subscription_packages(name,billing_period)')
+        .eq('business_id', widget.user['id']).order('created_at', ascending: false);
+      _packages = (packageRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _payments = (paymentRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _subscriptions = (subscriptionRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      if (_selectedPackage == null || !_packages.any((p) => p['id'].toString() == _selectedPackage)) {
+        _selectedPackage = _packages.isEmpty ? null : _packages.first['id'].toString();
+      }
+    } catch (error) {
+      _loadError = error.toString();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String _period(Map<String,dynamic> row) => row['billing_period'] == 'yearly' ? 'yıllık' : 'aylık';
+  String _paymentStatus(String? status) => switch (status) {
+    'confirmed' => 'Tahsilat onaylandı',
+    'rejected' => 'Reddedildi',
+    _ => 'Onay bekliyor',
+  };
+
+  Future<void> _requestPayment() async {
+    final packageRows = _packages.where((p) => p['id'].toString() == _selectedPackage).toList();
+    if (packageRows.isEmpty) return;
+    final package = packageRows.first;
+    setState(() => _requesting = true);
+    try {
+      await cloud.from('manual_payments').insert({
+        'business_id': widget.user['id'],
+        'package_id': package['id'],
+        'amount_try': (package['price_try'] as num).toDouble(),
+        'payment_method': _method,
+        'status': 'pending',
+      });
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tahsilat talebin yöneticiye iletildi. Ödeme onaylanınca paket etkinleşir.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tahsilat talebi oluşturulamadı: $error')));
+    } finally {
+      if (mounted) setState(() => _requesting = false);
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loadError != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text('Paket ve ödeme bilgileri yüklenemedi: $_loadError'), const SizedBox(height: 12), FilledButton(onPressed: () { setState(() => _loading = true); _load(); }, child: const Text('Tekrar dene'))])));
+    return ListView(padding: const EdgeInsets.all(20), children: [
+      const Heading('Paket ve ödeme', 'Paket seç; ödemeyi nakit veya banka havalesiyle yap.'),
+      if (_packages.isEmpty) const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('Henüz satışa açık paket bulunmuyor. Cafe Dünyam yöneticisi paket eklediğinde burada görünecek.'))),
+      if (_packages.isNotEmpty) ...[
+        DropdownButtonFormField<String>(
+          value: _selectedPackage,
+          decoration: const InputDecoration(labelText: 'Abonelik paketi'),
+          items: _packages.map((p) => DropdownMenuItem(
+            value: p['id'].toString(),
+            child: Text('${p['name']} • ${(p['price_try'] as num).toStringAsFixed(2)} TL / ${_period(p)}'),
+          )).toList(),
+          onChanged: (value) => setState(() => _selectedPackage = value),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          value: _method,
+          decoration: const InputDecoration(labelText: 'Ödeme yöntemi'),
+          items: const [
+            DropdownMenuItem(value: 'cash', child: Text('Nakit')),
+            DropdownMenuItem(value: 'bank_transfer', child: Text('Banka havalesi')),
+          ],
+          onChanged: (value) => setState(() => _method = value ?? 'cash'),
+        ),
+        const SizedBox(height: 12),
+        FilledButton.icon(
+          onPressed: _requesting ? null : _requestPayment,
+          icon: const Icon(Icons.receipt_long),
+          label: Text(_requesting ? 'Gönderiliyor…' : 'Tahsilat talebi oluştur'),
+        ),
+      ],
+      const SizedBox(height: 24),
+      const Text('Aboneliklerim', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      if (_subscriptions.isEmpty) const Text('Henüz etkin aboneliğin yok.'),
+      ..._subscriptions.map((s) {
+        final package = s['subscription_packages'] is Map ? Map<String,dynamic>.from(s['subscription_packages'] as Map) : <String,dynamic>{};
+        return Card(child: ListTile(
+          title: Text((package['name'] ?? 'Abonelik').toString()),
+          subtitle: Text('Durum: ${s['status']} • Bitiş: ${s['ends_at'] ?? 'Belirtilmedi'}'),
+        ));
+      }),
+      const SizedBox(height: 20),
+      const Text('Tahsilat geçmişi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      if (_payments.isEmpty) const Text('Henüz tahsilat talebin yok.'),
+      ..._payments.map((p) {
+        final package = p['subscription_packages'] is Map ? Map<String,dynamic>.from(p['subscription_packages'] as Map) : <String,dynamic>{};
+        return Card(child: ListTile(
+          leading: const Icon(Icons.payments_outlined, color: forest),
+          title: Text('${package['name'] ?? 'Paket'} • ${(p['amount_try'] as num).toStringAsFixed(2)} TL'),
+          subtitle: Text('${p['payment_method'] == 'cash' ? 'Nakit' : 'Banka havalesi'} • ${_paymentStatus(p['status']?.toString())}'),
+        ));
+      }),
+      const Padding(padding: EdgeInsets.only(top: 12), child: Text('Çevrim içi kart tahsilatı şu aşamada kapalıdır. Paket, yönetici nakit veya havale tahsilatını onayladıktan sonra etkinleşir.')),
+    ]);
+  }
+}
+
+class BusinessDashboard extends StatelessWidget{
+ final Map<String,dynamic> user;const BusinessDashboard({required this.user,super.key});
+ @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(20),children:[
+ Heading('Merhaba, ${user['name']}','İşletme yönetim panelin.'),
+ Container(padding:const EdgeInsets.all(20),decoration:BoxDecoration(color:forest,borderRadius:BorderRadius.circular(22)),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+ const Icon(Icons.storefront,color:cream,size:35),const SizedBox(height:12),Text('${user['cafeName']}',style:const TextStyle(color:Colors.white,fontSize:25,fontWeight:FontWeight.w900)),Text('${user['city']}',style:const TextStyle(color:Colors.white70)),const SizedBox(height:12),const Text('İşletme bilgileri bulut hesabındaki başvurundan yüklenir.',style:TextStyle(color:Colors.white70)),
+ ])),
+ Card(child:Padding(padding:const EdgeInsets.all(16),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+ const Text('NFC etiketi',style:TextStyle(fontSize:18,fontWeight:FontWeight.w900,color:forest)),
+ const SizedBox(height:8),
+ const Text('İşletme başına tek NFC etiketi tanımlanır.'),
+ const SizedBox(height:6),
+ const Text('Kasiyer etiketi müşteriye verir; müşteri okuttuktan sonra etiketi geri alır.'),
+ const Text('Etiket kaydı ve etkinleştirme yönetici tarafından yapılır.',style:TextStyle(fontSize:12)),
+]))),
+  if (user['nfcOrder'] is Map) Card(child: ListTile(
+    leading: const Icon(Icons.local_shipping_outlined, color: forest),
+    title: const Text('NFC etiketi teslimat durumu'),
+    subtitle: Text('${(user['nfcOrder'] as Map)['orderStatus'] ?? 'İncelemede'} • Teslim alacak: ${(user['nfcOrder'] as Map)['recipientName'] ?? user['name']}'),
+  )),
+ const SizedBox(height:16),const Text('Yönetim araçları',style:TextStyle(fontSize:20,fontWeight:FontWeight.w800,color:forest)),
+ const Card(child:ListTile(leading:Icon(Icons.campaign,color:forest),title:Text('Kampanya yönetimi'),subtitle:Text('Kampanya oluştur, düzenle ve yayından kaldır.'))),
+ const Card(child:ListTile(leading:Icon(Icons.loyalty,color:forest),title:Text('Sadakat programı'),subtitle:Text('Her şube için damga hedefini ve ödülü belirle; bekleyen ödül taleplerini teslim edildi olarak işaretle.'))),
+ if (user['approvalStatus'] == 'approved') const Card(child: Padding(padding: EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Text('Başvuru onaylandı', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: forest)),
+    SizedBox(height: 8),
+    Text('Ödemeler şu aşamada nakit veya banka havalesiyle alınır.'),
+    Text('Tahsilat, Cafe Dünyam yöneticisi tarafından doğrulanınca hesabına işlenir.'),
+    Text('Uygulamada çevrim içi kart ödemesi alınmaz; doğrulanmamış IBAN veya ödeme bağlantısı gösterilmez.'),
+  ]))),
+  const LocalModeNote(),
+ ]);
+}
+class BusinessDeals extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const BusinessDeals({required this.user, super.key});
+  @override State<BusinessDeals> createState() => _BusinessDealsState();
+}
+class _BusinessDealsState extends State<BusinessDeals> {
+  final title = TextEditingController(), benefit = TextEditingController();
+  final goal = TextEditingController(text: '8');
+  final rewardTitle = TextEditingController();
+  final rewardDescription = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+  String audience = 'Herkes', stampIcon = 'coffee';
+  bool busy = false;
+  XFile? _backgroundImage;
+  DateTime? _endsAt;
+  List<Map<String,dynamic>> _branches = [];
+  String? _selectedCafeId;
+
+  @override void initState() { super.initState(); _loadBranches(); }
+  @override void dispose() {
+    title.dispose(); benefit.dispose(); goal.dispose(); rewardTitle.dispose(); rewardDescription.dispose(); super.dispose();
+  }
+
+  Future<void> _loadBranches() async {
+    try {
+      final rows = await cloud.from('cafes').select('id,name,is_main_branch')
+        .eq('business_id', widget.user['id']).order('is_main_branch', ascending: false).order('created_at', ascending: true);
+      _branches = (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _selectedCafeId = widget.user['cafeId']?.toString() ?? (_branches.isEmpty ? null : _branches.first['id'].toString());
+      if (mounted) setState(() {});
+    } catch (error) { _reportSyncError(error); }
+  }
+
+  bool _canManage(Map<String,dynamic> d) => widget.user['role'] == 'admin' || d['ownerEmail'] == widget.user['email'];
+  void _reportSyncError(Object error) {
+    if (!mounted) return;
+    final text = error.toString().toLowerCase().contains('socket') ? 'Ağ bağlantısı yok.' : 'Buluta kaydedilemedi: $error';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
+  Future<void> _pickBackground() async {
+    try {
+      final file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 88, maxWidth: 1800);
+      if (file != null && mounted) setState(() => _backgroundImage = file);
+    } catch (error) { _reportSyncError(error); }
+  }
+
+  Future<String?> _uploadBackground(String campaignId) async {
+    final file = _backgroundImage;
+    if (file == null) return null;
+    final lower = file.name.toLowerCase();
+    final extension = lower.endsWith('.png') ? 'png' : lower.endsWith('.webp') ? 'webp' : 'jpg';
+    final contentType = extension == 'png' ? 'image/png' : extension == 'webp' ? 'image/webp' : 'image/jpeg';
+    final path = '${cloud.auth.currentUser!.id}/$campaignId.$extension';
+    await cloud.storage.from('campaign-backgrounds').uploadBinary(
+      path, await file.readAsBytes(),
+      fileOptions: FileOptions(contentType: contentType, upsert: true),
+    );
+    return cloud.storage.from('campaign-backgrounds').getPublicUrl(path);
+  }
+
+  Future<void> _add() async {
+    final targetCafe = _selectedCafeId;
+    final stampGoal = int.tryParse(goal.text.trim());
+    if (targetCafe == null || title.text.trim().isEmpty || benefit.text.trim().isEmpty ||
+        stampGoal == null || stampGoal < 1 || stampGoal > 100 || rewardTitle.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şube, kampanya adı, avantaj, 1–100 damga hedefi ve ödül adını doldur.')));
+      return;
+    }
+    setState(() => busy = true);
+    try {
+      final created = await cloud.from('campaigns').insert({
+        'cafe_id': targetCafe,
+        'title': title.text.trim(),
+        'benefit': benefit.text.trim(),
+        'audience': audience,
+        'stamps_required': stampGoal,
+        'reward_title': rewardTitle.text.trim(),
+        'reward_description': rewardDescription.text.trim(),
+        'stamp_icon': stampIcon,
+        'starts_at': DateTime.now().toUtc().toIso8601String(),
+        'ends_at': _endsAt?.add(const Duration(hours: 23, minutes: 59)).toUtc().toIso8601String(),
+        'is_active': true,
+      }).select('id').single();
+      final campaignId = created['id'].toString();
+      final imageUrl = await _uploadBackground(campaignId);
+      if (imageUrl != null) {
+        await cloud.from('campaigns').update({'background_image_url': imageUrl}).eq('id', campaignId);
+      }
+      title.clear(); benefit.clear(); goal.text = '8'; rewardTitle.clear(); rewardDescription.clear();
+      if (mounted) setState(() { _backgroundImage = null; _endsAt = null; stampIcon = 'coffee'; });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sadakat kampanyası oluşturuldu.')));
+    } catch (error) { _reportSyncError(error); }
+    finally { if (mounted) setState(() => busy = false); }
+  }
+
+  Future<void> _edit(Map<String,dynamic> campaign) async {
+    if (!_canManage(campaign)) return;
+    final editTitle = TextEditingController(text: '${campaign['title']}');
+    final editBenefit = TextEditingController(text: '${campaign['benefit']}');
+    final editGoal = TextEditingController(text: '${campaign['stampsRequired'] ?? 8}');
+    final editReward = TextEditingController(text: '${campaign['rewardTitle'] ?? 'Ödül'}');
+    final result = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Kampanya kartını düzenle'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: editTitle, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
+        TextField(controller: editBenefit, decoration: const InputDecoration(labelText: 'Avantaj açıklaması')),
+        TextField(controller: editGoal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Damga hedefi')),
+        TextField(controller: editReward, decoration: const InputDecoration(labelText: 'Ödül adı')),
+      ])),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Kaydet'))],
+    ));
+    try {
+      final newGoal = int.tryParse(editGoal.text.trim());
+      if (result == true && editTitle.text.trim().isNotEmpty && editBenefit.text.trim().isNotEmpty &&
+          editReward.text.trim().isNotEmpty && newGoal != null && newGoal >= 1 && newGoal <= 100) {
+        await cloud.from('campaigns').update({
+          'title': editTitle.text.trim(), 'benefit': editBenefit.text.trim(),
+          'stamps_required': newGoal, 'reward_title': editReward.text.trim(),
+        }).eq('id', campaign['id']);
+        if (mounted) setState(() {});
+      }
+    } catch (error) { _reportSyncError(error); }
+    finally { editTitle.dispose(); editBenefit.dispose(); editGoal.dispose(); editReward.dispose(); }
+  }
+
+  Future<void> _toggle(Map<String,dynamic> campaign) async {
+    if (!_canManage(campaign)) return;
+    try {
+      await cloud.from('campaigns').update({'is_active': campaign['active'] != true}).eq('id', campaign['id']);
+      if (mounted) setState(() {});
+    } catch (error) { _reportSyncError(error); }
+  }
+
+  @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
+    const Heading('Kampanyalarım', 'Her kampanya kendi damga hedefi ve ödülü olan ayrı bir karttır.'),
+    DropdownButtonFormField<String>(
+      value: _selectedCafeId,
+      decoration: const InputDecoration(labelText: 'Kampanyanın yayınlanacağı şube'),
+      items: _branches.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name'].toString()))).toList(),
+      onChanged: (value) => setState(() => _selectedCafeId = value),
+    ),
+    const SizedBox(height: 10),
+    TextField(controller: title, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
+    const SizedBox(height: 10),
+    TextField(controller: benefit, decoration: const InputDecoration(labelText: 'Kampanya açıklaması / avantaj')),
+    const SizedBox(height: 10),
+    TextField(controller: goal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Ödül için gereken damga sayısı (1–100)')),
+    const SizedBox(height: 10),
+    TextField(controller: rewardTitle, decoration: const InputDecoration(labelText: 'Ödül adı', hintText: 'Örn. Ücretsiz kahve')),
+    const SizedBox(height: 10),
+    TextField(controller: rewardDescription, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Ödül açıklaması')),
+    const SizedBox(height: 10),
+    DropdownButtonFormField<String>(
+      value: stampIcon,
+      decoration: const InputDecoration(labelText: 'Damga simgesi'),
+      items: const [
+        DropdownMenuItem(value: 'coffee', child: Text('Kahve')),
+        DropdownMenuItem(value: 'cake', child: Text('Pasta / tatlı')),
+        DropdownMenuItem(value: 'stamp', child: Text('Damga')),
+        DropdownMenuItem(value: 'pizza', child: Text('Pizza')),
+        DropdownMenuItem(value: 'ice_cream', child: Text('Dondurma')),
+        DropdownMenuItem(value: 'sandwich', child: Text('Sandviç')),
+        DropdownMenuItem(value: 'star', child: Text('Yıldız')),
+        DropdownMenuItem(value: 'heart', child: Text('Kalp')),
+      ],
+      onChanged: (value) => setState(() => stampIcon = value ?? 'coffee'),
+    ),
+    const SizedBox(height: 10),
+    OutlinedButton.icon(onPressed: _pickBackground, icon: const Icon(Icons.image_outlined),
+      label: Text(_backgroundImage == null ? 'Kart arka plan görseli seç' : 'Görsel seçildi: ${_backgroundImage!.name}')),
+    if (_endsAt != null) Text('Kampanya bitişi: ${_endsAt!.day}.${_endsAt!.month}.${_endsAt!.year}'),
+    TextButton.icon(onPressed: () async {
+      final date = await showDatePicker(context: context, initialDate: _endsAt ?? DateTime.now().add(const Duration(days: 30)),
+        firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 730)));
+      if (date != null) setState(() => _endsAt = date);
+    }, icon: const Icon(Icons.event), label: Text(_endsAt == null ? 'İsteğe bağlı bitiş tarihi ekle' : 'Bitiş tarihini değiştir')),
+    if (_endsAt != null) TextButton(onPressed: () => setState(() => _endsAt = null), child: const Text('Bitiş tarihini kaldır')),
+    const SizedBox(height: 8),
+    DropdownButtonFormField<String>(value: audience, decoration: const InputDecoration(labelText: 'Hedef kitle'), items: const [
+      DropdownMenuItem(value: 'Herkes', child: Text('Herkes')),
+      DropdownMenuItem(value: 'Öğrenci', child: Text('Öğrenci')),
+      DropdownMenuItem(value: 'Yeni müşteriler', child: Text('Yeni müşteriler')),
+    ], onChanged: (v) => setState(() => audience = v ?? 'Herkes')),
+    const SizedBox(height: 12),
+    FilledButton.icon(onPressed: busy ? null : _add, icon: const Icon(Icons.add), label: Text(busy ? 'Kaydediliyor…' : 'Kampanya oluştur')),
+    const SizedBox(height: 20),
+    const Text('Yönettiğin kampanyalar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19)),
+    FutureBuilder<List<Map<String,dynamic>>>(future: LocalData.list(dealsKey, starterDeals), builder: (context, snapshot) {
+      if (snapshot.hasError) return Text('Kampanyalar yüklenemedi: ${snapshot.error}');
+      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+      final visible = snapshot.data!.where(_canManage).toList();
+      if (visible.isEmpty) return const Padding(padding: EdgeInsets.all(12), child: Text('Henüz sana ait kampanya yok.'));
+      return Column(children: visible.map((campaign) => Card(child: ListTile(
+        title: Text('${campaign['title']}'),
+        subtitle: Text('${campaign['benefit']}\n${campaign['stampsRequired'] ?? 8} damga • ${campaign['rewardTitle'] ?? 'Ödül'} • Durum: ${campaign['active'] == true ? 'Aktif' : 'Arşivde'}'),
+        isThreeLine: true,
+        trailing: PopupMenuButton<String>(onSelected: (value) {
+          if (value == 'edit') _edit(campaign);
+          if (value == 'toggle') _toggle(campaign);
+        }, itemBuilder: (_) => const [
+          PopupMenuItem(value: 'edit', child: Text('Düzenle')),
+          PopupMenuItem(value: 'toggle', child: Text('Aktif / arşivle')),
+        ]),
+      ))).toList());
+    }),
+  ]);
+}
+
+class BusinessSettings extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const BusinessSettings({required this.user, super.key});
+  @override State<BusinessSettings> createState() => _BusinessSettingsState();
+}
+class _BusinessSettingsState extends State<BusinessSettings> {
+  final _branchName = TextEditingController();
+  final _branchCity = TextEditingController();
+  final _branchDistrict = TextEditingController();
+  final _branchAddress = TextEditingController();
+  final _employeeEmail = TextEditingController();
+  List<Map<String,dynamic>> _branches = [];
+  List<Map<String,dynamic>> _employees = [];
+  String? _selectedBranchId;
+  bool _loading = true, _savingBranch = false, _savingEmployee = false;
+
+  @override void initState() { super.initState(); _load(); }
+  @override void dispose() {
+    _branchName.dispose(); _branchCity.dispose(); _branchDistrict.dispose();
+    _branchAddress.dispose(); _employeeEmail.dispose(); super.dispose();
+  }
+
+  Future<void> _load() async {
+    try {
+      final businessId = widget.user['id'].toString();
+      final branches = await cloud.from('cafes').select().eq('business_id', businessId)
+        .order('is_main_branch', ascending: false).order('created_at', ascending: true);
+      final employees = await cloud.from('business_employees').select()
+        .eq('business_id', businessId).order('created_at', ascending: false);
+      _branches = (branches as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _employees = (employees as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      if (_selectedBranchId == null || !_branches.any((b) => b['id'].toString() == _selectedBranchId)) {
+        _selectedBranchId = _branches.isEmpty ? null : _branches.first['id'].toString();
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Şube ve çalışan bilgileri yüklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _addBranch() async {
+    if (_branchName.text.trim().isEmpty || _branchCity.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şube adı ve şehir gerekli.')));
+      return;
+    }
+    setState(() => _savingBranch = true);
+    try {
+      await cloud.from('cafes').insert({
+        'owner_id': widget.user['id'],
+        'business_id': widget.user['id'],
+        'name': _branchName.text.trim(),
+        'city': _branchCity.text.trim(),
+        'district': _branchDistrict.text.trim(),
+        'address': _branchAddress.text.trim(),
+        'category': widget.user['businessType'] ?? 'Kafe',
+        'is_active': true,
+        'is_main_branch': false,
+      });
+      _branchName.clear(); _branchCity.clear(); _branchDistrict.clear(); _branchAddress.clear();
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Yeni şube eklendi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Şube eklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _savingBranch = false);
+    }
+  }
+
+  Future<void> _addEmployee() async {
+    final email = _employeeEmail.text.trim();
+    if (email.isEmpty || _selectedBranchId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Çalışan e-postası ve şube seçmelisin.')));
+      return;
+    }
+    setState(() => _savingEmployee = true);
+    try {
+      final response = await cloud.functions.invoke('find-business-employee', body: {'email': email}, headers: const {'x-region': 'eu-west-3'});
+      final data = response.data;
+      if (response.status != 200 || data is! Map || data['employeeId'] == null) {
+        throw StateError(data is Map ? (data['error'] ?? 'Çalışan bulunamadı.').toString() : 'Çalışan bulunamadı.');
+      }
+      await cloud.from('business_employees').insert({
+        'business_id': widget.user['id'],
+        'employee_id': data['employeeId'],
+        'branch_id': _selectedBranchId,
+        'display_name': data['displayName'] ?? email,
+        'is_active': true,
+      });
+      _employeeEmail.clear();
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Çalışan eklendi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Çalışan eklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _savingEmployee = false);
+    }
+  }
+
+  Future<void> _deactivateEmployee(String id) async {
+    try {
+      await cloud.from('business_employees').update({'is_active': false}).eq('id', id);
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Çalışan kaldırılamadı: $error')));
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    return ListView(padding: const EdgeInsets.all(20), children: [
+      const Heading('İşletmem', 'İşletme bilgileri, şubeler ve çalışanlar.'),
+      Card(child: ListTile(leading: const Icon(Icons.store, color: forest), title: Text('${widget.user['cafeName']}'), subtitle: Text('${widget.user['city']}'))),
+      Card(child: ListTile(leading: const Icon(Icons.email, color: forest), title: Text('${widget.user['email']}'), subtitle: const Text('Hesap e-postası'))),
+      Card(child: ListTile(leading: const Icon(Icons.phone, color: forest), title: Text('${widget.user['phone'] ?? 'Telefon girilmedi'}'), subtitle: const Text('İşletme telefonu'))),
+      Card(child: ListTile(leading: const Icon(Icons.location_on, color: forest), title: Text('${widget.user['businessAddress'] ?? 'Adres girilmedi'}'), subtitle: Text('${widget.user['district'] ?? ''} / ${widget.user['province'] ?? ''}'))),
+      const SizedBox(height: 20),
+      const Text('Şube yönetimi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      ..._branches.map((branch) => Card(child: ListTile(
+        leading: Icon(branch['is_main_branch'] == true ? Icons.home_work : Icons.storefront, color: forest),
+        title: Text(branch['name'].toString()),
+        subtitle: Text('${branch['city'] ?? ''} • ${branch['is_active'] == true ? 'Aktif' : 'Pasif'}${branch['is_main_branch'] == true ? ' • Ana şube' : ''}'),
+      ))),
+      const SizedBox(height: 8),
+      TextField(controller: _branchName, decoration: const InputDecoration(labelText: 'Yeni şube adı')),
+      const SizedBox(height: 8),
+      TextField(controller: _branchCity, decoration: const InputDecoration(labelText: 'Şehir')),
+      const SizedBox(height: 8),
+      TextField(controller: _branchDistrict, decoration: const InputDecoration(labelText: 'İlçe')),
+      const SizedBox(height: 8),
+      TextField(controller: _branchAddress, decoration: const InputDecoration(labelText: 'Adres')),
+      const SizedBox(height: 10),
+      FilledButton.icon(onPressed: _savingBranch ? null : _addBranch, icon: const Icon(Icons.add_business), label: Text(_savingBranch ? 'Ekleniyor…' : 'Şube ekle')),
+      const SizedBox(height: 24),
+      const Text('Çalışan yönetimi', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
+      if (_branches.isNotEmpty) DropdownButtonFormField<String>(
+        value: _selectedBranchId,
+        decoration: const InputDecoration(labelText: 'Çalışanın bağlı olacağı şube'),
+        items: _branches.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name'].toString()))).toList(),
+        onChanged: (value) => setState(() => _selectedBranchId = value),
+      ),
+      const SizedBox(height: 8),
+      TextField(controller: _employeeEmail, keyboardType: TextInputType.emailAddress, decoration: const InputDecoration(labelText: 'Çalışan hesap e-postası')),
+      const SizedBox(height: 10),
+      FilledButton.icon(onPressed: _savingEmployee || _branches.isEmpty ? null : _addEmployee, icon: const Icon(Icons.person_add_alt_1), label: Text(_savingEmployee ? 'Ekleniyor…' : 'Çalışan ekle')),
+      const Text('Çalışan önce Cafe Dünyam müşteri hesabı oluşturmalıdır. Şube ve çalışan limitleri seçili abonelik paketine göre uygulanır.', style: TextStyle(fontSize: 12)),
+      ..._employees.where((e) => e['is_active'] == true).map((employee) {
+        final branch = _branches.where((b) => b['id'] == employee['branch_id']).toList();
+        return Card(child: ListTile(
+          leading: const Icon(Icons.person_outline, color: forest),
+          title: Text((employee['display_name'] ?? 'Çalışan').toString()),
+          subtitle: Text(branch.isEmpty ? 'Tüm şubeler' : branch.first['name'].toString()),
+          trailing: IconButton(tooltip: 'Çalışanı kaldır', onPressed: () => _deactivateEmployee(employee['id'].toString()), icon: const Icon(Icons.person_remove_alt_1)),
+        ));
+      }),
+      const LocalModeNote(),
+    ]);
+  }
+}
+
+class BusinessReviewPage extends StatelessWidget {
+  final Map<String,dynamic> user;
+  const BusinessReviewPage({required this.user, super.key});
+  Future<void> _logout(BuildContext context) async {
+    await cloud.auth.signOut();
+    final p = await SharedPreferences.getInstance();
+    await p.remove(sessionKey);
+    if (context.mounted) Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const GatePage()), (r) => false);
+  }
+  @override Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(title: const Text('Başvuru durumu'), actions: [IconButton(onPressed: () => _logout(context), icon: const Icon(Icons.logout))]),
+    body: SafeArea(child: ListView(padding: const EdgeInsets.all(24), children: [
+      const SizedBox(height: 24),
+      const Icon(Icons.hourglass_top_rounded, size: 72, color: forest),
+      const SizedBox(height: 20),
+      const Text('Başvurunuz inceleniyor', textAlign: TextAlign.center, style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: forest)),
+      const SizedBox(height: 12),
+      const Text('İşletme başvurunuz alındı. Yönetici onayı gelene kadar işletme ana sayfasına geçemezsiniz. Onaydan sonra işletme başına tek NFC etiketi atanır; tahsilat nakit veya banka havalesiyle yapılır.', textAlign: TextAlign.center, style: TextStyle(fontSize: 16)),
+      const SizedBox(height: 24),
+      Card(child: ListTile(leading: const Icon(Icons.storefront, color: forest), title: Text('${user['cafeName'] ?? 'İşletmeniz'}'), subtitle: Text('${user['email']}'))),
+      Card(child: ListTile(leading: const Icon(Icons.inventory_2_outlined, color: forest), title: const Text('NFC etiketi'), subtitle: const Text('İşletme başına tek etiket • Yönetici onayı sonrası etkinleştirilir'))),
+      const SizedBox(height: 12),
+      const LocalModeNote(),
+    ])),
+  );
+}
+class EmployeeShell extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const EmployeeShell({required this.user, super.key});
+  @override State<EmployeeShell> createState() => _EmployeeShellState();
+}
+class _EmployeeShellState extends State<EmployeeShell> {
+  bool _loading = true;
+  List<Map<String,dynamic>> _claims = [];
+
+  @override void initState() { super.initState(); _load(); }
+
+  Future<void> _load() async {
+    try {
+      final businessId = widget.user['businessId']?.toString();
+      final branchId = widget.user['branchId']?.toString();
+      if (businessId == null) throw StateError('Çalışan işletmesi bulunamadı.');
+      final branches = await cloud.from('cafes').select('id').eq('business_id', businessId).eq('is_active', true);
+      final branchIds = (branches as List).map((r) => r['id'].toString()).toList();
+      if (branchIds.isEmpty) {
+        _claims = [];
+      } else {
+        var query = cloud.from('reward_claims')
+          .select('id,cafe_id,stamps_spent,reward_snapshot,created_at,cafes(name)')
+          .eq('status', 'issued');
+        final rows = branchId != null
+          ? await query.eq('cafe_id', branchId).order('created_at', ascending: false)
+          : await query.inFilter('cafe_id', branchIds).order('created_at', ascending: false);
+        _claims = (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül talepleri yüklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _redeem(String claimId) async {
+    try {
+      final response = await cloud.functions.invoke('redeem-cafe-reward', body: {'claimId': claimId}, headers: const {'x-region': 'eu-west-3'});
+      final data = response.data;
+      if (response.status == 200 && data is Map && data['success'] == true) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ödül teslim edildi olarak işaretlendi.')));
+        await _load();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data is Map ? (data['error'] ?? 'Ödül teslim edilemedi.').toString() : 'Ödül teslim edilemedi.')));
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül teslim edilemedi: $error')));
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    return Scaffold(
+      appBar: AppBar(title: const Text('Cafe Dünyam • Çalışan')),
+      body: ListView(padding: const EdgeInsets.all(18), children: [
+        Heading('Merhaba, ${widget.user['employeeName'] ?? widget.user['name']}', 'Bekleyen ödül taleplerini doğrula ve teslim et.'),
+        if (_claims.isEmpty) const Text('Bekleyen ödül talebi yok.'),
+        ..._claims.map((claim) {
+          final id = claim['id'].toString();
+          final code = id.length >= 8 ? id.substring(0, 8).toUpperCase() : id;
+          final reward = claim['reward_snapshot'] is Map ? Map<String,dynamic>.from(claim['reward_snapshot'] as Map) : <String,dynamic>{};
+          final cafe = claim['cafes'] is Map ? Map<String,dynamic>.from(claim['cafes'] as Map) : <String,dynamic>{};
+          return Card(child: ListTile(
+            title: Text((reward['title'] ?? 'Ödül').toString()),
+            subtitle: Text('${cafe['name'] ?? 'Şube'} • Kod: $code • ${claim['stamps_spent']} damga'),
+            trailing: IconButton(icon: const Icon(Icons.check_circle_outline), tooltip: 'Teslim edildi', onPressed: () => _redeem(id)),
+          ));
+        }),
+      ]),
+    );
+  }
+}
+
+class AdminShell extends StatefulWidget {
+  final Map<String,dynamic> user;
+  const AdminShell({required this.user, super.key});
+  @override State<AdminShell> createState() => _AdminShellState();
+}
+class _AdminShellState extends State<AdminShell> {
+  int tab = 0;
+  Future<void> _logout() async {
+    await cloud.auth.signOut();
+    final p = await SharedPreferences.getInstance(); await p.remove(sessionKey);
+    if (!mounted) return;
+    Navigator.of(context).pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const GatePage()), (r) => false);
+  }
+  @override Widget build(BuildContext context) => Scaffold(
+    appBar: AppBar(leading: const Padding(padding: EdgeInsets.all(8), child: CafeLogo(size: 38)), title: const Text('Yönetim Merkezi', style: TextStyle(fontWeight: FontWeight.w900)), actions: [IconButton(tooltip: 'Çıkış yap', onPressed: _logout, icon: const Icon(Icons.logout))]),
+    body: IndexedStack(index: tab, children: [AdminDashboard(onNavigate: (index) => setState(() => tab = index)), const AdminApplications(), const AdminCampaigns(), const AdminUsers(), const AdminOrders(), const AdminBilling(), const AdminSettings()]),
+    bottomNavigationBar: NavigationBar(selectedIndex: tab, onDestinationSelected: (i) => setState(() => tab = i), destinations: const [
+      NavigationDestination(icon: Icon(Icons.space_dashboard_rounded), label: 'Özet'),
+      NavigationDestination(icon: Icon(Icons.fact_check_outlined), label: 'Başvurular'),
+      NavigationDestination(icon: Icon(Icons.campaign_outlined), label: 'Kampanyalar'),
+      NavigationDestination(icon: Icon(Icons.people_alt_outlined), label: 'Kullanıcılar'),
+      NavigationDestination(icon: Icon(Icons.local_shipping_outlined), label: 'NFC teslimat'),
+      NavigationDestination(icon: Icon(Icons.payments_outlined), label: 'Paket & ödeme'),
+      NavigationDestination(icon: Icon(Icons.tune_rounded), label: 'Ayarlar'),
+    ]),
+  );
+}
+
+class AdminDashboard extends StatelessWidget {
+  final ValueChanged<int> onNavigate;
+  const AdminDashboard({required this.onNavigate, super.key});
+  @override Widget build(BuildContext context) => FutureBuilder<List<dynamic>>(
+    future: Future.wait([LocalData.list(usersKey, []), LocalData.list(dealsKey, starterDeals), LocalData.list(businessOrdersKey, [])]),
+    builder: (context, s) {
+      if (s.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Yönetim özeti yüklenemedi: ${s.error}')));
+      if (!s.hasData) return const Center(child: CircularProgressIndicator());
+      final users = s.data![0] as List<Map<String,dynamic>>;
+      final deals = s.data![1] as List<Map<String,dynamic>>;
+      final orders = s.data![2] as List<Map<String,dynamic>>;
+      final pending = users.where((u) => u['role'] == 'business' && u['approvalStatus'] != 'approved' && u['approvalStatus'] != 'rejected').length;
+      final approved = users.where((u) => u['role'] == 'business' && u['approvalStatus'] == 'approved').length;
+      final active = deals.where((d) => d['active'] == true).length;
+      Widget metric(String label, int value, IconData icon, Color color) => Expanded(child: Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, color: color, size: 26), const SizedBox(height: 12), Text('$value', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900)), Text(label, style: const TextStyle(fontSize: 12))]))));
+      return ListView(padding: const EdgeInsets.all(18), children: [
+        Container(padding: const EdgeInsets.all(22), decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF211711), Color(0xFF684025)]), borderRadius: BorderRadius.circular(24)), child: const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          CafeLogo(size: 54, light: true), SizedBox(height: 16),
+          Text('Kontrol sende.', style: TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w900)),
+          SizedBox(height: 6), Text('Cafe Dünyam işletmelerini, kampanyalarını ve sipariş taleplerini tek merkezden yönet.', style: TextStyle(color: Colors.white70)),
+        ])),
+        const SizedBox(height: 12),
+        Row(children: [metric('Bekleyen başvuru', pending, Icons.pending_actions, brown), const SizedBox(width: 8), metric('Onaylı işletme', approved, Icons.storefront, forest)]),
+        Row(children: [metric('Aktif kampanya', active, Icons.campaign, brown), const SizedBox(width: 8), metric('Sipariş talebi', orders.length, Icons.receipt_long, forest)]),
+        const SizedBox(height: 12),
+        const Heading('Yönetim kısayolları', 'Sık kullanılan işlemlere hızlı erişim.'),
+        Card(child: ListTile(leading: const Icon(Icons.fact_check, color: brown), title: const Text('Başvuruları incele'), subtitle: Text('$pending başvuru inceleme bekliyor'), trailing: const Icon(Icons.chevron_right), onTap: () => onNavigate(1))),
+        Card(child: ListTile(leading: const Icon(Icons.campaign, color: brown), title: const Text('Kampanya denetimi'), subtitle: Text('$active aktif kampanya'), trailing: const Icon(Icons.chevron_right), onTap: () => onNavigate(2))),
+        const LocalModeNote(),
+      ]);
+    },
+  );
+}
+
+class AdminUsers extends StatefulWidget { const AdminUsers({super.key}); @override State<AdminUsers> createState()=>_AdminUsersState(); }
+class _AdminUsersState extends State<AdminUsers> {
+  Future<void> _remove(Map<String,dynamic> u) async {
+    final ok = await showDialog<bool>(context: context, builder: (c)=>AlertDialog(title: const Text('Kullanıcıyı sil?'), content: Text('${u['email']} hesabı ve ona bağlı işletme/müşteri kayıtları sistemden kalıcı olarak silinecek. Bu işlem geri alınamaz.'), actions:[TextButton(onPressed:()=>Navigator.pop(c,false),child:const Text('Vazgeç')),FilledButton(onPressed:()=>Navigator.pop(c,true),child:const Text('Sil'))]));
+    if (ok != true || u['role'] == 'admin') return;
+    if (cloud.auth.currentSession != null && LocalData._uuid(u['id']?.toString())) {
+      try {
+        final response = await cloud.functions.invoke('admin-delete-user', body: {'userId': u['id']}, headers: const {'x-region': 'eu-west-3'});
+        if (response.status != 200 || response.data is! Map || response.data['success'] != true) throw StateError('Hesap silinemedi.');
+        if (mounted) setState(() {});
+      } catch (e) {
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Hesap silinemedi: $e')));
+      }
+      return;
+    }
+    final users = await LocalData.list(usersKey, []);
+    users.removeWhere((x) => x['email'] == u['email']);
+    await LocalData.saveList(usersKey, users);
+    if (mounted) setState(() {});
+  }
+  @override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(usersKey, []),builder:(context,s){
+    if(s.hasError)return Center(child:Padding(padding:const EdgeInsets.all(24),child:Text('Kullanıcılar yüklenemedi: ${s.error}')));
+    if(!s.hasData)return const Center(child:CircularProgressIndicator());
+    final users=s.data!;
+    return ListView(padding:const EdgeInsets.all(18),children:[
+      Heading('Kullanıcı yönetimi','Bulut sistemindeki müşteri, çalışan ve işletme hesapları.'),
+      Card(child:ListTile(leading:const Icon(Icons.people,color:brown),title:Text('${users.length} hesap'),subtitle:const Text('Yönetici hesabı silinemez.'))),
+      ...users.map((u)=>Card(child:ListTile(leading:CircleAvatar(backgroundColor:const Color(0xFFF0E1CF),child:Icon(u['role']=='business'?Icons.storefront:u['role']=='admin'?Icons.admin_panel_settings:Icons.person,color:forest)),title:Text('${u['cafeName'] ?? u['name'] ?? 'Kullanıcı'}'),subtitle:Text('${u['email']}\nRol: ${u['role']} • Durum: ${u['approvalStatus'] ?? 'Aktif'}'),isThreeLine:true,trailing:u['role']=='admin'?null:IconButton(tooltip:'Hesabı sil',onPressed:()=>_remove(u),icon:const Icon(Icons.delete_outline,color:Colors.red))))),
+      const LocalModeNote(),
+    ]);
+  });
+}
+
+class AdminOrders extends StatefulWidget { const AdminOrders({super.key}); @override State<AdminOrders> createState()=>_AdminOrdersState(); }
+class _AdminOrdersState extends State<AdminOrders> {
+  Future<void> _updateOrder(Map<String,dynamic> order, String key, String value) async {
+    final orders = await LocalData.list(businessOrdersKey, []);
+    final i = orders.indexWhere((o) => o['id'] == order['id']);
+    if (i < 0) return;
+    orders[i][key] = value;
+    await LocalData.saveList(businessOrdersKey, orders);
+    if (mounted) setState(() {});
+  }
+  @override Widget build(BuildContext context)=>FutureBuilder<List<Map<String,dynamic>>>(future:LocalData.list(businessOrdersKey,[]),builder:(context,s){
+    if(s.hasError)return Center(child:Padding(padding:const EdgeInsets.all(24),child:Text('Siparişler yüklenemedi: ${s.error}')));
+    if(!s.hasData)return const Center(child:CircularProgressIndicator());
+    final orders=s.data!;
+    return ListView(padding:const EdgeInsets.all(18),children:[
+      const Heading('NFC etiketi teslimatı','Her işletme için tek etiketin hazırlanma ve teslimat durumunu takip et.'),
+      if(orders.isEmpty) const Card(child:Padding(padding:EdgeInsets.all(18),child:Text('Henüz sipariş talebi yok.'))),
+      ...orders.map((o)=>Card(child:Padding(padding:const EdgeInsets.all(14),child:Column(crossAxisAlignment:CrossAxisAlignment.start,children:[
+        Text('${o['businessName'] ?? 'İşletme'}',style:const TextStyle(fontSize:18,fontWeight:FontWeight.w900)),
+        Text('${o['businessEmail'] ?? ''} • İşletme başına tek NFC etiketi'),
+        Text('Teslimat: ${o['recipientName'] ?? ''} • ${o['province'] ?? ''} / ${o['district'] ?? ''}'),
+        Text('Adres: ${o['address'] ?? ''}'),
+        Text('Sipariş durumu: ${o['orderStatus'] ?? 'İncelemede'}'),
+        DropdownButtonFormField<String>(
+          value: ['İncelemede','Etiket hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].contains(o['orderStatus']) ? o['orderStatus'] : 'İncelemede',
+          decoration: const InputDecoration(labelText: 'Sipariş durumu'),
+          items: const ['İncelemede','Etiket hazırlanıyor','Kargoya verildi','Teslim edildi','Başvuru reddedildi'].map((v) => DropdownMenuItem(value: v, child: Text(v))).toList(),
+          onChanged: (v) { if (v != null) _updateOrder(o, 'orderStatus', v); },
+        ),
+      ])))),
+      const LocalModeNote(),
+    ]);
+  });
+}
+
+class AdminBilling extends StatefulWidget {
+  const AdminBilling({super.key});
+  @override State<AdminBilling> createState() => _AdminBillingState();
+}
+class _AdminBillingState extends State<AdminBilling> {
+  final _name = TextEditingController();
+  final _description = TextEditingController();
+  final _price = TextEditingController();
+  final _branches = TextEditingController(text: '1');
+  final _employees = TextEditingController(text: '2');
+  final _tagUid = TextEditingController();
+  final _secretReference = TextEditingController();
+  String _period = 'monthly';
+  String? _selectedBusinessId, _selectedBranchId;
+  List<Map<String,dynamic>> _businesses = [], _branchesForTags = [], _tags = [];
+  bool _loading = true, _saving = false;
+  String? _loadError;
+  List<Map<String,dynamic>> _packages = [];
+  List<Map<String,dynamic>> _payments = [];
+
+  @override void initState() { super.initState(); _load(); }
+  @override void dispose() { _name.dispose(); _description.dispose(); _price.dispose(); _branches.dispose(); _employees.dispose(); _tagUid.dispose(); _secretReference.dispose(); super.dispose(); }
+
+  Future<void> _load() async {
+    _loadError = null;
+    try {
+      final packageRows = await cloud.from('subscription_packages').select().order('created_at', ascending: false);
+      final paymentRows = await cloud.from('manual_payments')
+        .select('*, subscription_packages(name,billing_period)')
+        .order('created_at', ascending: false);
+      final businessRows = await cloud.from('profiles').select('id,full_name,email')
+        .eq('role', 'business').eq('approval_status', 'approved').order('full_name');
+      final branchRows = await cloud.from('cafes').select('id,name,business_id,is_active')
+        .eq('is_active', true).order('name');
+      final tagRows = await cloud.from('nfc_tags')
+        .select('id,business_id,branch_id,tag_uid,status,provisioned_at').order('created_at', ascending: false);
+      _packages = (packageRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _payments = (paymentRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _businesses = (businessRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _branchesForTags = (branchRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      _tags = (tagRows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
+      if (_selectedBusinessId == null || !_businesses.any((b) => b['id'].toString() == _selectedBusinessId)) {
+        _selectedBusinessId = _businesses.isEmpty ? null : _businesses.first['id'].toString();
+      }
+      final availableBranches = _branchesForTags.where((b) => b['business_id'].toString() == _selectedBusinessId).toList();
+      if (_selectedBranchId == null || !availableBranches.any((b) => b['id'].toString() == _selectedBranchId)) {
+        _selectedBranchId = availableBranches.isEmpty ? null : availableBranches.first['id'].toString();
+      }
+    } catch (error) {
+      _loadError = error.toString();
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _registerNfcTag() async {
+    if (_selectedBusinessId == null || _selectedBranchId == null || _tagUid.text.trim().isEmpty || _secretReference.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('İşletme, şube, etiket UID ve anahtar referansı gerekli.')));
+      return;
+    }
+    try {
+      final response = await cloud.functions.invoke('manage-nfc-tag', body: {
+        'action': 'register',
+        'businessId': _selectedBusinessId,
+        'branchId': _selectedBranchId,
+        'tagUid': _tagUid.text.trim(),
+        'secretReference': _secretReference.text.trim(),
+      }, headers: const {'x-region': 'eu-west-3'});
+      final data = response.data;
+      if (response.status != 200 || data is! Map || data['success'] != true) {
+        throw StateError(data is Map ? (data['error'] ?? 'NFC etiketi kaydedilemedi.').toString() : 'NFC etiketi kaydedilemedi.');
+      }
+      _tagUid.clear(); _secretReference.clear();
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('NFC etiketi işletmeye bağlandı.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('NFC etiketi kaydedilemedi: $error')));
+    }
+  }
+
+  Future<void> _revokeNfcTag(String id) async {
+    try {
+      final response = await cloud.functions.invoke('manage-nfc-tag', body: {'action': 'revoke', 'tagId': id}, headers: const {'x-region': 'eu-west-3'});
+      final data = response.data;
+      if (response.status != 200 || data is! Map || data['success'] != true) throw StateError('NFC etiketi iptal edilemedi.');
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('NFC etiketi iptal edilemedi: $error')));
+    }
+  }
+
+  Future<void> _addPackage() async {
+    final price = num.tryParse(_price.text.trim().replaceAll(',', '.'));
+    final branches = int.tryParse(_branches.text.trim());
+    final employees = int.tryParse(_employees.text.trim());
+    if (_name.text.trim().isEmpty || price == null || price < 0 || branches == null || branches < 1 || employees == null || employees < 1) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paket adı, geçerli fiyat ve kullanım limitleri gir.')));
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await cloud.from('subscription_packages').insert({
+        'name': _name.text.trim(),
+        'description': _description.text.trim(),
+        'price_try': price,
+        'billing_period': _period,
+        'branch_limit': branches,
+        'employee_limit': employees,
+        'is_active': true,
+      });
+      _name.clear(); _description.clear(); _price.clear();
+      _branches.text = '1'; _employees.text = '2';
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Paket eklendi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket eklenemedi: $error')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _editPackage(Map<String,dynamic> package) async {
+    final name = TextEditingController(text: package['name']?.toString() ?? '');
+    final description = TextEditingController(text: package['description']?.toString() ?? '');
+    final price = TextEditingController(text: (package['price_try'] as num).toString());
+    final branches = TextEditingController(text: package['branch_limit'].toString());
+    final employees = TextEditingController(text: package['employee_limit'].toString());
+    var period = package['billing_period']?.toString() ?? 'monthly';
+    final saved = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, setDialogState) => AlertDialog(
+        title: const Text('Paketi düzenle'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: name, decoration: const InputDecoration(labelText: 'Paket adı')),
+          TextField(controller: description, decoration: const InputDecoration(labelText: 'Açıklama')),
+          TextField(controller: price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fiyat (TL)')),
+          DropdownButtonFormField<String>(
+            value: period,
+            decoration: const InputDecoration(labelText: 'Dönem'),
+            items: const [DropdownMenuItem(value: 'monthly', child: Text('Aylık')), DropdownMenuItem(value: 'yearly', child: Text('Yıllık'))],
+            onChanged: (value) => setDialogState(() => period = value ?? 'monthly'),
+          ),
+          TextField(controller: branches, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Şube limiti')),
+          TextField(controller: employees, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Çalışan limiti')),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () async {
+            final amount = num.tryParse(price.text.trim().replaceAll(',', '.'));
+            final branchLimit = int.tryParse(branches.text.trim());
+            final employeeLimit = int.tryParse(employees.text.trim());
+            if (name.text.trim().isEmpty || amount == null || amount < 0 || branchLimit == null || branchLimit < 1 || employeeLimit == null || employeeLimit < 1) {
+              ScaffoldMessenger.of(dialogContext).showSnackBar(const SnackBar(content: Text('Paket bilgilerini kontrol et.')));
+              return;
+            }
+            try {
+              await cloud.from('subscription_packages').update({
+                'name': name.text.trim(), 'description': description.text.trim(),
+                'price_try': amount, 'billing_period': period,
+                'branch_limit': branchLimit, 'employee_limit': employeeLimit,
+                'updated_at': DateTime.now().toUtc().toIso8601String(),
+              }).eq('id', package['id']);
+              if (dialogContext.mounted) Navigator.pop(dialogContext, true);
+            } catch (error) {
+              if (dialogContext.mounted) ScaffoldMessenger.of(dialogContext).showSnackBar(SnackBar(content: Text('Paket güncellenemedi: $error')));
+            }
+          }, child: const Text('Kaydet')),
+        ],
+      ),
+    ));
+    name.dispose(); description.dispose(); price.dispose(); branches.dispose(); employees.dispose();
+    if (saved == true) await _load();
+  }
+
+  Future<void> _togglePackage(Map<String,dynamic> package, bool active) async {
+    try {
+      await cloud.from('subscription_packages').update({'is_active': active, 'updated_at': DateTime.now().toUtc().toIso8601String()}).eq('id', package['id']);
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Paket durumu değiştirilemedi: $error')));
+    }
+  }
+
+  Future<void> _confirmPayment(String id) async {
+    try {
+      await cloud.rpc('confirm_manual_payment', params: {'p_payment_id': id});
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Tahsilat onaylandı ve abonelik etkinleştirildi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tahsilat onaylanamadı: $error')));
+    }
+  }
+
+  Future<void> _rejectPayment(String id) async {
+    try {
+      await cloud.from('manual_payments').update({'status': 'rejected'}).eq('id', id).eq('status', 'pending');
+      await _load();
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Tahsilat reddedilemedi: $error')));
+    }
+  }
+
+  @override Widget build(BuildContext context) {
+    if (_loading) return const Center(child: CircularProgressIndicator());
+    if (_loadError != null) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Column(mainAxisSize: MainAxisSize.min, children: [Text('Paketler ve tahsilatlar yüklenemedi: $_loadError'), const SizedBox(height: 12), FilledButton(onPressed: () { setState(() => _loading = true); _load(); }, child: const Text('Tekrar dene'))])));
+    return ListView(padding: const EdgeInsets.all(18), children: [
+      const Heading('Paketler ve tahsilatlar', 'Paket fiyatlarını belirle; nakit veya havale tahsilatlarını doğrula.'),
+      const Text('Yeni abonelik paketi', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
+      TextField(controller: _name, decoration: const InputDecoration(labelText: 'Paket adı')),
+      const SizedBox(height: 8),
+      TextField(controller: _description, decoration: const InputDecoration(labelText: 'Açıklama')),
+      const SizedBox(height: 8),
+      TextField(controller: _price, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Fiyat (TL)')),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        value: _period,
+        decoration: const InputDecoration(labelText: 'Abonelik dönemi'),
+        items: const [DropdownMenuItem(value: 'monthly', child: Text('Aylık')), DropdownMenuItem(value: 'yearly', child: Text('Yıllık'))],
+        onChanged: (value) => setState(() => _period = value ?? 'monthly'),
+      ),
+      const SizedBox(height: 8),
+      Row(children: [
+        Expanded(child: TextField(controller: _branches, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Şube limiti'))),
+        const SizedBox(width: 10),
+        Expanded(child: TextField(controller: _employees, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Çalışan limiti'))),
+      ]),
+      const SizedBox(height: 10),
+      FilledButton.icon(onPressed: _saving ? null : _addPackage, icon: const Icon(Icons.add), label: Text(_saving ? 'Ekleniyor…' : 'Paketi ekle')),
+      const SizedBox(height: 22),
+      const Text('Mevcut paketler', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
+      if (_packages.isEmpty) const Text('Henüz paket eklenmedi.'),
+      ..._packages.map((p) => Card(child: ListTile(
+        title: Text('${p['name']} • ${(p['price_try'] as num).toStringAsFixed(2)} TL'),
+        subtitle: Text('${p['billing_period'] == 'yearly' ? 'Yıllık' : 'Aylık'} • ${p['branch_limit']} şube • ${p['employee_limit']} çalışan'),
+        trailing: Row(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.center, children: [
+          IconButton(tooltip: 'Düzenle', onPressed: () => _editPackage(p), icon: const Icon(Icons.edit_outlined)),
+          Switch(value: p['is_active'] == true, onChanged: (value) => _togglePackage(p, value)),
+        ]),
+      ))),
+      const SizedBox(height: 24),
+      const Text('NFC etiketleri', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
+      const Text('Her işletmeye tek NTAG 424 DNA etiketi bağlanır. Etiketi önce SDM modunda programla ve anahtarını Edge Function Secrets içine ekle.'),
+      DropdownButtonFormField<String>(
+        value: _selectedBusinessId,
+        decoration: const InputDecoration(labelText: 'İşletme'),
+        items: _businesses.map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text((b['full_name'] ?? b['email'] ?? 'İşletme').toString()))).toList(),
+        onChanged: (value) => setState(() {
+          _selectedBusinessId = value;
+          final branches = _branchesForTags.where((b) => b['business_id'].toString() == value).toList();
+          _selectedBranchId = branches.isEmpty ? null : branches.first['id'].toString();
+        }),
+      ),
+      const SizedBox(height: 8),
+      DropdownButtonFormField<String>(
+        value: _selectedBranchId,
+        decoration: const InputDecoration(labelText: 'Etiketin kullanılacağı şube'),
+        items: _branchesForTags.where((b) => b['business_id'].toString() == _selectedBusinessId)
+          .map((b) => DropdownMenuItem(value: b['id'].toString(), child: Text(b['name'].toString()))).toList(),
+        onChanged: (value) => setState(() => _selectedBranchId = value),
+      ),
+      const SizedBox(height: 8),
+      TextField(controller: _tagUid, decoration: const InputDecoration(labelText: 'NTAG 424 DNA UID (14 hex karakter)')),
+      const SizedBox(height: 8),
+      TextField(controller: _secretReference, decoration: const InputDecoration(labelText: 'Edge secret anahtar referansı')),
+      const SizedBox(height: 10),
+      FilledButton.icon(onPressed: _registerNfcTag, icon: const Icon(Icons.nfc), label: const Text('NFC etiketini bağla')),
+      ..._tags.map((tag) {
+        final business = _businesses.where((b) => b['id'] == tag['business_id']).toList();
+        final branch = _branchesForTags.where((b) => b['id'] == tag['branch_id']).toList();
+        return Card(child: ListTile(
+          title: Text(tag['tag_uid'].toString()),
+          subtitle: Text('${business.isEmpty ? 'İşletme' : (business.first['full_name'] ?? business.first['email'])} • ${branch.isEmpty ? 'Şube' : branch.first['name']} • ${tag['status']}'),
+          trailing: tag['status'] == 'active' ? IconButton(tooltip: 'Etiketi iptal et', onPressed: () => _revokeNfcTag(tag['id'].toString()), icon: const Icon(Icons.block)) : const Icon(Icons.block, color: Colors.grey),
+        ));
+      }),
+      const SizedBox(height: 24),
+      const Text('Tahsilat talepleri', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
+      if (_payments.isEmpty) const Text('Henüz tahsilat talebi yok.'),
+      ..._payments.map((p) {
+        final businessMatches = _businesses.where((b) => b['id'].toString() == p['business_id'].toString()).toList();
+        final business = businessMatches.isNotEmpty ? businessMatches.first : <String,dynamic>{};
+        final package = p['subscription_packages'] is Map ? Map<String,dynamic>.from(p['subscription_packages'] as Map) : <String,dynamic>{};
+        final pending = p['status'] == 'pending';
+        return Card(child: Padding(padding: const EdgeInsets.all(12), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text((business['full_name'] ?? business['email'] ?? 'İşletme').toString(), style: const TextStyle(fontWeight: FontWeight.w900)),
+          Text('${package['name'] ?? 'Paket'} • ${(p['amount_try'] as num).toStringAsFixed(2)} TL'),
+          Text('${p['payment_method'] == 'cash' ? 'Nakit' : 'Banka havalesi'} • ${p['status'] == 'confirmed' ? 'Onaylandı' : p['status'] == 'rejected' ? 'Reddedildi' : 'Onay bekliyor'}'),
+          if (pending) Row(children: [
+            Expanded(child: OutlinedButton(onPressed: () => _rejectPayment(p['id'].toString()), child: const Text('Reddet'))),
+            const SizedBox(width: 10),
+            Expanded(child: FilledButton(onPressed: () => _confirmPayment(p['id'].toString()), child: const Text('Tahsilatı onayla'))),
+          ]),
+        ])));
+      }),
+    ]);
+  }
+}
+
+class AdminSettings extends StatelessWidget {
+  const AdminSettings({super.key});
+  @override Widget build(BuildContext context)=>ListView(padding:const EdgeInsets.all(18),children:[
+    const Heading('Yönetim ayarları','Yönetici erişimi ve hizmet yapılandırması.'),
+    const Card(child:ListTile(leading:Icon(Icons.shield_outlined,color:forest),title:Text('Yönetici erişimi'),subtitle:Text('Yönetici girişi yalnızca onaylı yönetici rolüne sahip bulut hesabıyla yapılır.'))),
+    const Card(child:ListTile(leading:Icon(Icons.payments_outlined,color:brown),title:Text('Manuel tahsilat'),subtitle:Text('Şimdilik çevrim içi ödeme yok. İşletme ödemeleri nakit veya banka havalesiyle alınır; yönetici tahsilatı panelden onaylar.'))),
+    const Card(child:ListTile(leading:Icon(Icons.storage_outlined,color:forest),title:Text('Veri saklama'),subtitle:Text('Oturum açan kullanıcıların bulut verileri Supabase erişim politikalarıyla korunur; yayından önce uçtan uca yetki testleri tamamlanmalıdır.'))),
+    const LocalModeNote(),
+  ]);
+}
+class AdminApplications extends StatefulWidget {
+  const AdminApplications({super.key});
+  @override State<AdminApplications> createState() => _AdminApplicationsState();
+}
+class _AdminApplicationsState extends State<AdminApplications> {
+  Future<void> _setStatus(Map<String,dynamic> target, String status) async {
+    if (cloud.auth.currentSession != null && LocalData._uuid(target['id']?.toString())) {
+      await cloud.rpc('set_business_application_status', params: {'p_business_id': target['id'], 'p_status': status});
+      if (mounted) setState(() {});
+      return;
+    }
+    final users = await LocalData.list(usersKey, []);
+    final i = users.indexWhere((u) => u['email'] == target['email']);
+    if (i < 0) return;
+    users[i]['approvalStatus'] = status;
+    users[i]['applicationStatus'] = status == 'approved' ? 'Onaylandı' : status == 'rejected' ? 'Reddedildi' : 'Başvurunuz inceleniyor';
+    await LocalData.saveList(usersKey, users);
+    final orders = await LocalData.list(businessOrdersKey, []);
+    final oi = orders.indexWhere((o) => o['businessEmail'] == target['email']);
+    if (oi >= 0) {
+      orders[oi]['orderStatus'] = status == 'approved' ? 'Etiket hazırlanıyor' : status == 'rejected' ? 'Başvuru reddedildi' : 'İncelemede';
+      await LocalData.saveList(businessOrdersKey, orders);
+    }
+    if (mounted) setState(() {});
+  }
+  @override Widget build(BuildContext context) => FutureBuilder<List<Map<String,dynamic>>>(
+    future: LocalData.list(usersKey, []),
+    builder: (context, s) {
+      if (s.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Başvurular yüklenemedi: ${s.error}')));
+      if (!s.hasData) return const Center(child: CircularProgressIndicator());
+      final pending = s.data!.where((u) => u['role'] == 'business' && u['approvalStatus'] != 'approved' && u['approvalStatus'] != 'rejected').toList();
+      final rejected = s.data!.where((u) => u['role'] == 'business' && u['approvalStatus'] == 'rejected').toList();
+      return ListView(padding: const EdgeInsets.all(18), children: [
+        const Heading('İşletme başvuruları', 'Başvuruları incele ve onayla.'),
+        if (pending.isEmpty) const Text('Bekleyen başvuru yok.'),
+        ...pending.map((u) => Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${u['cafeName']}', style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+          Text('${u['name']} • ${u['email']}'),
+          Text('${u['phone'] ?? ''} • ${u['province'] ?? ''} / ${u['district'] ?? ''}'),
+          Text('${u['businessAddress'] ?? ''}'),
+          const Text('NFC etiketi: İşletme başına tek adet • Tahsilat: Nakit / banka havalesi'),
+          const SizedBox(height: 10),
+          Row(children: [
+            Expanded(child: FilledButton(onPressed: () => _setStatus(u, 'approved'), child: const Text('Onayla'))),
+            const SizedBox(width: 8),
+            Expanded(child: OutlinedButton(onPressed: () => _setStatus(u, 'rejected'), child: const Text('Reddet'))),
+          ]),
+        ])))),
+        if (rejected.isNotEmpty) const Padding(padding: EdgeInsets.only(top: 12), child: Text('Reddedilen başvurular', style: TextStyle(fontWeight: FontWeight.w800))),
+        ...rejected.map((u) => ListTile(title: Text('${u['cafeName']}'), subtitle: Text('${u['email']} • Reddedildi'), trailing: TextButton(onPressed: () => _setStatus(u, 'pending'), child: const Text('Yeniden incele')))),
+        const LocalModeNote(),
+      ]);
+    },
+  );
+}
+class AdminCampaigns extends StatefulWidget {
+  const AdminCampaigns({super.key});
+  @override State<AdminCampaigns> createState() => _AdminCampaignsState();
+}
+class _AdminCampaignsState extends State<AdminCampaigns> {
+  Future<void> _addCampaign() async {
+    final cafes = await cloud.from('cafes').select('id,name').eq('is_active', true).order('name');
+    if (!mounted) return;
+    if ((cafes as List).isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kampanya eklemek için önce aktif bir şube oluşturulmalı.')));
+      return;
+    }
+    final title = TextEditingController();
+    final benefit = TextEditingController();
+    String? cafeId = cafes.first['id'].toString();
+    String audience = 'Herkes';
+    final saved = await showDialog<bool>(context: context, builder: (dialogContext) => StatefulBuilder(
+      builder: (dialogContext, refresh) => AlertDialog(
+        title: const Text('Yeni kampanya oluştur'),
+        content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
+          DropdownButtonFormField<String>(
+            value: cafeId,
+            decoration: const InputDecoration(labelText: 'Yayınlanacak şube'),
+            items: cafes.map((raw) => DropdownMenuItem<String>(value: raw['id'].toString(), child: Text(raw['name'].toString()))).toList(),
+            onChanged: (value) => refresh(() => cafeId = value),
+          ),
+          TextField(controller: title, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
+          TextField(controller: benefit, decoration: const InputDecoration(labelText: 'İndirim / avantaj açıklaması')),
+          DropdownButtonFormField<String>(
+            value: audience,
+            decoration: const InputDecoration(labelText: 'Hedef kitle'),
+            items: const [
+              DropdownMenuItem(value: 'Herkes', child: Text('Herkes')),
+              DropdownMenuItem(value: 'Öğrenci', child: Text('Öğrenci')),
+              DropdownMenuItem(value: 'Yeni müşteriler', child: Text('Yeni müşteriler')),
+            ],
+            onChanged: (value) => refresh(() => audience = value ?? 'Herkes'),
+          ),
+        ])),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('Vazgeç')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('Oluştur')),
+        ],
+      ),
+    ));
+    try {
+      if (saved == true) {
+        if (cafeId == null || title.text.trim().isEmpty || benefit.text.trim().isEmpty) {
+          throw StateError('Şube, kampanya başlığı ve avantaj açıklaması zorunludur.');
+        }
+        await cloud.from('campaigns').insert({
+          'cafe_id': cafeId,
+          'title': title.text.trim(),
+          'benefit': benefit.text.trim(),
+          'audience': audience,
+          'is_active': true,
+        });
+        if (mounted) {
+          setState(() {});
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Kampanya oluşturuldu.')));
+        }
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Kampanya oluşturulamadı: $error')));
+    } finally {
+      title.dispose();
+      benefit.dispose();
+    }
+  }
+  Future<void> _toggle(Map<String,dynamic> d) async {
+    final deals = await LocalData.list(dealsKey, starterDeals);
+    final i = deals.indexWhere((x) => x['id'] == d['id']);
+    if (i >= 0) { deals[i]['active'] = !(deals[i]['active'] == true); await LocalData.saveList(dealsKey, deals); if (mounted) setState(() {}); }
+  }
+  Future<void> _delete(String id) async {
+    final deals = await LocalData.list(dealsKey, starterDeals);
+    deals.removeWhere((d) => d['id'] == id);
+    await LocalData.saveList(dealsKey, deals);
+    if (mounted) setState(() {});
+  }
+  Future<void> _edit(Map<String,dynamic> d) async {
+    final title = TextEditingController(text: '${d['title']}');
+    final benefit = TextEditingController(text: '${d['benefit']}');
+    final result = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
+      title: const Text('Kampanyayı düzenle'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(controller: title, decoration: const InputDecoration(labelText: 'Başlık')),
+        TextField(controller: benefit, decoration: const InputDecoration(labelText: 'Avantaj')),
+      ]),
+      actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Kaydet'))],
+    ));
+    if (result == true && title.text.trim().isNotEmpty && benefit.text.trim().isNotEmpty) {
+      final deals = await LocalData.list(dealsKey, starterDeals);
+      final i = deals.indexWhere((x) => x['id'] == d['id']);
+      if (i >= 0) { deals[i]['title'] = title.text.trim(); deals[i]['benefit'] = benefit.text.trim(); await LocalData.saveList(dealsKey, deals); if (mounted) setState(() {}); }
+    }
+    title.dispose(); benefit.dispose();
+  }
+  @override Widget build(BuildContext context) => FutureBuilder<List<Map<String,dynamic>>>(
+    future: LocalData.list(dealsKey, starterDeals),
+    builder: (context, s) {
+      if (s.hasError) return Center(child: Padding(padding: const EdgeInsets.all(24), child: Text('Kampanyalar yüklenemedi: ${s.error}')));
+      if (!s.hasData) return const Center(child: CircularProgressIndicator());
+      return ListView(padding: const EdgeInsets.all(18), children: [
+        const Heading('Tüm kampanyalar', 'Yönetici tüm işletmelerin kampanyalarını düzenleyebilir.'),
+        Align(alignment: Alignment.centerRight, child: FilledButton.icon(
+          onPressed: _addCampaign,
+          icon: const Icon(Icons.add),
+          label: const Text('Kampanya ekle'),
+        )),
+        const SizedBox(height: 10),
+        ...s.data!.map((d) => Card(child: ListTile(
+          title: Text('${d['title']}'),
+          subtitle: Text('${d['benefit']} • Sahip: ${d['ownerName'] ?? d['ownerEmail'] ?? d['cafeId'] ?? 'Belirtilmemiş'}'),
+          isThreeLine: true,
+          trailing: PopupMenuButton<String>(onSelected: (v) { if (v == 'toggle') _toggle(d); else if (v == 'edit') _edit(d); else _delete('${d['id']}'); }, itemBuilder: (_) => const [
+            PopupMenuItem(value: 'edit', child: Text('Düzenle')),
+            PopupMenuItem(value: 'toggle', child: Text('Aktif / pasif')),
+            PopupMenuItem(value: 'delete', child: Text('Sil')),
+          ]),
+        ))),
+        const LocalModeNote(),
+      ]);
+    },
+  );
+}
+).hasMatch(code)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('12 karakterli ödül kodunu kontrol et.')));
+      return;
+    }
+    try {
+      final response = await cloud.functions.invoke('redeem-cafe-reward', body: {'code': code}, headers: const {'x-region': 'eu-west-3'});
+      final data = response.data;
+      if (response.status == 200 && data is Map && data['success'] == true) {
+        _redemptionCode.clear();
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ödül teslim edildi. Müşterinin yeni damga turu başladı.')));
+        if (mounted) setState(() {});
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(data is Map ? (data['error'] ?? 'Ödül teslim edilemedi.').toString() : 'Ödül teslim edilemedi.')));
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error.toString().toLowerCase().contains('socket') ? 'Ağ bağlantısı yok.' : 'Ödül teslim edilemedi: $error')));
+    }
   }
 
   Future<void> _redeem(String claimId) async {
