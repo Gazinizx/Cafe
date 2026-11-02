@@ -1268,80 +1268,62 @@ class BusinessRewardSettings extends StatefulWidget {
   @override State<BusinessRewardSettings> createState() => _BusinessRewardSettingsState();
 }
 class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
-  final _goal = TextEditingController(text: '8');
-  final _title = TextEditingController();
-  final _description = TextEditingController();
-  final _redemptionCode = TextEditingController();
-  bool _loading = true, _saving = false, _active = true;
-  List<Map<String,dynamic>> _branches = [];
-  String? _selectedCafeId;
+  final TextEditingController _redemptionCode = TextEditingController();
+  List<String> _cafeIds = [];
+  bool _loading = true, _redeeming = false;
+  int _refreshKey = 0;
 
   @override void initState() { super.initState(); _load(); }
-  @override void dispose() { _goal.dispose(); _title.dispose(); _description.dispose(); _redemptionCode.dispose(); super.dispose(); }
+  @override void dispose() { _redemptionCode.dispose(); super.dispose(); }
 
   Future<void> _load() async {
     try {
-      final rows = await cloud.from('cafes').select('id,name,is_main_branch')
-        .eq('business_id', widget.user['id']).order('is_main_branch', ascending: false).order('created_at', ascending: true);
-      _branches = (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
-      _selectedCafeId = widget.user['cafeId']?.toString() ?? (_branches.isEmpty ? null : _branches.first['id'].toString());
-      await _loadReward();
+      final rows = await cloud.from('cafes').select('id')
+        .eq('business_id', widget.user['id']);
+      _cafeIds = (rows as List).map((r) => r['id'].toString()).toList();
     } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül ayarları yüklenemedi: $error')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('İşletme bilgileri yüklenemedi: $error')));
     } finally {
       if (mounted) setState(() => _loading = false);
     }
   }
 
-  Future<void> _loadReward() async {
-    final cafeId = _selectedCafeId;
-    if (cafeId == null) return;
-    final row = await cloud.from('cafe_rewards').select().eq('cafe_id', cafeId).maybeSingle();
-    _goal.text = (row?['stamps_required'] ?? 8).toString();
-    _title.text = (row?['reward_title'] ?? '').toString();
-    _description.text = (row?['reward_description'] ?? '').toString();
-    _active = row == null ? true : row['is_active'] == true;
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _save() async {
-    final cafeId = _selectedCafeId;
-    final goal = int.tryParse(_goal.text.trim());
-    if (cafeId == null || goal == null || goal < 1 || goal > 100 || _title.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('1–100 arasında damga sayısı ve ödül adı gir.')));
-      return;
-    }
-    setState(() => _saving = true);
-    try {
-      await cloud.from('cafe_rewards').upsert({
-        'cafe_id': cafeId,
-        'stamps_required': goal,
-        'reward_title': _title.text.trim(),
-        'reward_description': _description.text.trim(),
-        'is_active': _active,
-        'updated_at': DateTime.now().toUtc().toIso8601String(),
-      });
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sadakat ödülü kaydedildi.')));
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ödül kaydedilemedi: $error')));
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
   Future<List<Map<String,dynamic>>> _pendingClaims() async {
-    final cafeIds = _branches.map((b) => b['id'].toString()).toList();
-    if (cafeIds.isEmpty) return [];
+    if (_cafeIds.isEmpty) return [];
     final rows = await cloud.from('reward_claims')
       .select('id,campaign_id,redemption_code,stamps_spent,reward_snapshot,created_at')
-      .inFilter('cafe_id', cafeIds).eq('status', 'issued')
+      .inFilter('cafe_id', _cafeIds).eq('status', 'issued')
       .order('created_at', ascending: false);
     return (rows as List).map((r) => Map<String,dynamic>.from(r as Map)).toList();
   }
 
   Future<void> _redeemCode() async {
     final code = _redemptionCode.text.trim().toUpperCase();
-    if (!RegExp(r'^[0-9A-F]{12}
+    if (!RegExp(r'^[0-9A-F]{12}$').hasMatch(code)) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('12 karakterli ödül kodunu kontrol et.')));
+      return;
+    }
+    setState(() => _redeeming = true);
+    try {
+      final response = await cloud.functions.invoke('redeem-cafe-reward',
+        body: {'code': code}, headers: const {'x-region': 'eu-west-3'});
+      final data = response.data;
+      if (response.status != 200 || data is! Map || data['success'] != true) {
+        throw Exception(data is Map ? (data['error'] ?? 'Ödül teslim edilemedi.') : 'Ödül teslim edilemedi.');
+      }
+      _redemptionCode.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ödül teslim edildi. Müşterinin yeni damga turu başladı.')));
+        setState(() => _refreshKey++);
+      }
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: Text(error.toString().toLowerCase().contains('socket') ? 'Ağ bağlantısı yok.' : error.toString().replaceFirst('Exception: ', '')),
+      ));
+    } finally {
+      if (mounted) setState(() => _redeeming = false);
+    }
+  }
 
   @override Widget build(BuildContext context) {
     if (_loading) return const Center(child: CircularProgressIndicator());
@@ -1355,13 +1337,14 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
       ),
       const SizedBox(height: 8),
       FilledButton.icon(
-        onPressed: _saving ? null : _redeemCode,
+        onPressed: _redeeming ? null : _redeemCode,
         icon: const Icon(Icons.card_giftcard),
-        label: const Text('Ödül Verildi olarak işaretle'),
+        label: Text(_redeeming ? 'Kontrol ediliyor…' : 'Ödül Verildi olarak işaretle'),
       ),
       const SizedBox(height: 24),
       const Text('Bekleyen ödüller', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: forest)),
       FutureBuilder<List<Map<String,dynamic>>>(
+        key: ValueKey(_refreshKey),
         future: _pendingClaims(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) return const Padding(padding: EdgeInsets.all(16), child: Center(child: CircularProgressIndicator()));
@@ -1369,12 +1352,15 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
           final claims = snapshot.data ?? [];
           if (claims.isEmpty) return const Padding(padding: EdgeInsets.only(top: 8), child: Text('Bekleyen ödül yok.'));
           return Column(children: claims.map((claim) {
-            final id = claim['id'].toString();
             final reward = claim['reward_snapshot'] is Map ? Map<String,dynamic>.from(claim['reward_snapshot'] as Map) : <String,dynamic>{};
+            final code = (claim['redemption_code'] ?? '').toString();
             return Card(child: ListTile(
               title: Text((reward['title'] ?? 'Ödül talebi').toString()),
-              subtitle: Text('Kod: ${claim['redemption_code'] ?? ''} • ${claim['stamps_spent'] ?? 0} damga'),
-              trailing: TextButton(onPressed: () => _redeem(id), child: const Text('Teslim edildi')),
+              subtitle: Text('Kod: $code • ${claim['stamps_spent'] ?? 0} damga'),
+              trailing: TextButton(
+                onPressed: () => setState(() => _redemptionCode.text = code),
+                child: const Text('Kodu kullan'),
+              ),
             ));
           }).toList());
         },
@@ -1382,6 +1368,7 @@ class _BusinessRewardSettingsState extends State<BusinessRewardSettings> {
     ]);
   }
 }
+
 class BusinessBilling extends StatefulWidget {
   final Map<String,dynamic> user;
   const BusinessBilling({required this.user, super.key});
