@@ -48,7 +48,10 @@ label{display:block;font-size:13px;font-weight:650;margin:12px 0 6px}input,selec
 <div class="panel"><h2>Etiket bağla</h2><div class="notice">Önce etiketi SDM modunda programla ve anahtarını Supabase Edge Function Secrets içinde NFC_SDM_KEYS_JSON olarak tanımla. Anahtar bu panelde veya uygulamada gösterilmez.</div>
 <form id="nfcForm"><div class="form-grid"><div><label>İşletme</label><select id="nfcBusiness" required></select></div><div><label>Şube</label><select id="nfcBranch" required></select></div><div><label>Etiket UID (14 hex karakter)</label><input id="nfcUid" pattern="[A-Fa-f0-9]{14}" required></div><div><label>Anahtar referansı</label><input id="nfcSecret" pattern="[A-Za-z0-9_-]{3,80}" required></div></div><div class="form-actions"><button type="submit">Etiketi işletmeye bağla</button></div></form></div>
 <div class="panel"><h2>Kayıtlı etiketler</h2><div id="tagsTable" class="table-wrap"></div></div></section>
-<section id="tab-campaigns" class="hidden"><div class="page-head"><div><h1>Kampanyalar</h1><p>İşletmelerin yayınladığı kampanyaları denetle.</p></div><div class="actions"><button class="secondary" data-refresh>Yenile</button><button id="newCampaignBtn">Kampanya ekle</button></div></div><div id="campaignFormPanel" class="panel hidden"><h2>Yeni kampanya</h2><form id="campaignForm"><div class="form-grid"><div><label>Şube</label><select id="campaignBranch" required></select></div><div><label>Hedef kitle</label><select id="campaignAudience"><option>Herkes</option><option>Öğrenci</option><option>Yeni müşteriler</option></select></div><div><label>Kampanya başlığı</label><input id="campaignTitle" maxlength="120" required></div><div><label>Avantaj / indirim</label><input id="campaignBenefit" maxlength="500" required></div></div><div class="form-actions"><button type="button" class="secondary" id="cancelCampaignBtn">Vazgeç</button><button type="submit">Kaydet</button></div></form></div><div class="panel"><div id="campaignsTable" class="table-wrap"></div></div></section>
+<section id="tab-campaigns" class="hidden"><div class="page-head"><div><h1>Kampanyalar</h1><p>İşletmelerin yayınladığı kampanyaları denetle.</p></div><div class="actions"><button class="secondary" data-refresh>Yenile</button><button id="newCampaignBtn">Kampanya ekle</button></div></div><div id="campaignFormPanel" class="panel hidden"><h2>Yeni kampanya</h2><form id="campaignForm"><div class="form-grid"><div><label>Şube</label><select id="campaignBranch" required></select></div><div><label>Hedef kitle</label><select id="campaignAudience"><option>Herkes</option><option>Öğrenci</option><option>Yeni müşteriler</option></select></div><div><label>Kampanya başlığı</label><input id="campaignTitle" maxlength="120" required></div><div><label>Avantaj / indirim</label><input id="campaignBenefit" maxlength="500" required></div></div><div class="form-actions"><button type="button" class="secondary" id="cancelCampaignBtn">Vazgeç</button><button type="submit">Kaydet</button></div></form></div><div class="panel"><div id="campaignsTable" class="table-wrap"></div></div>
+<div class="panel"><h2>Damga simgesi kütüphanesi</h2><p>İşletmeler yalnızca burada etkinleştirilen hazır simgeleri seçebilir.</p>
+<form id="stampIconForm"><div class="form-grid"><div><label>Hazır simge</label><select id="stampIconKey" required></select></div><div><label>Müşteriye gösterilecek ad</label><input id="stampIconLabel" maxlength="40" required></div></div><div class="form-actions"><button type="submit" id="addStampIconBtn">Simge ekle</button></div></form>
+<div id="stampIconsTable" class="table-wrap"></div></div></section>
 </main></div>
 <div id="toast" class="toast hidden"></div>
 <script type="module">
@@ -58,6 +61,13 @@ const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_qOXjE2ZLsFcD3Eg0_XnfVA_Q106MWe_
 const db = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY);
 const $ = (id) => document.getElementById(id);
 let businesses = [], branches = [], packages = [], tags = [], campaignBranches = [];
+const stampIconCatalog = {
+ coffee:"Kahve", cake:"Pasta / tatlı", stamp:"Damga", pizza:"Pizza",
+ ice_cream:"Dondurma", sandwich:"Sandviç", star:"Yıldız", heart:"Kalp",
+ burger:"Hamburger", tea:"Çay", cookie:"Kurabiye", donut:"Donut",
+ gift:"Hediye", leaf:"Yaprak", music:"Müzik", book:"Kitap"
+};
+let stampIcons = [];
 const esc = (v) => String(v ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const money = v => new Intl.NumberFormat("tr-TR",{style:"currency",currency:"TRY"}).format(Number(v||0));
 const pill = s => '<span class="pill '+(s==="pending"?"pending":s==="rejected"?"rejected":"")+'">'+esc(({pending:"Bekliyor",approved:"Onaylandı",confirmed:"Tahsil edildi",rejected:"Reddedildi",active:"Aktif",revoked:"İptal"}[s]||s))+'</span>';
@@ -130,6 +140,29 @@ async function loadCampaigns(){
  const data=campaignResult.data||[];
  $("campaignsTable").innerHTML=data.length?'<table><thead><tr><th>Kampanya</th><th>İşletme / şube</th><th>Avantaj</th><th>Hedef</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>'+data.map(c=>'<tr><td>'+esc(c.title)+'</td><td>'+esc(c.cafes?.name)+'</td><td>'+esc(c.benefit)+'</td><td>'+esc(c.audience)+'</td><td>'+pill(c.is_active?"active":"rejected")+'</td><td><div class="actions"><button class="secondary" data-action="edit-campaign" data-id="'+esc(c.id)+'">Düzenle</button><button class="secondary" data-action="toggle-campaign" data-id="'+esc(c.id)+'" data-active="'+(!c.is_active)+'">'+(c.is_active?"Pasifleştir":"Etkinleştir")+'</button><button class="danger" data-action="delete-campaign" data-id="'+esc(c.id)+'">Sil</button></div></td></tr>').join("")+'</tbody></table>':'<div class="empty">Kampanya bulunmuyor.</div>';
 }
+async function loadStampIcons(){
+ const {data,error}=await db.from("campaign_stamp_icons").select("*").order("sort_order").order("label");
+ if(error)throw error;
+ stampIcons=data||[];
+ $("stampIconsTable").innerHTML=stampIcons.length?'<table><thead><tr><th>Simge</th><th>Durum</th><th>İşlem</th></tr></thead><tbody>'+stampIcons.map(icon=>'<tr><td><b>'+esc(icon.label)+'</b><small>'+esc(icon.icon_key)+'</small></td><td>'+pill(icon.is_active?"active":"rejected")+'</td><td><button class="secondary" data-action="toggle-stamp-icon" data-id="'+esc(icon.icon_key)+'" data-active="'+(!icon.is_active)+'">'+(icon.is_active?"Kapat":"Etkinleştir")+'</button></td></tr>').join("")+'</tbody></table>':'<div class="empty">Damga simgesi bulunamadı.</div>';
+ const available=Object.entries(stampIconCatalog).filter(([key])=>!stampIcons.some(icon=>icon.icon_key===key));
+ $("stampIconKey").innerHTML=available.length?available.map(([key,label])=>'<option value="'+esc(key)+'">'+esc(label)+'</option>').join(""):'<option value="">Eklenebilecek simge yok</option>';
+ $("stampIconKey").disabled=available.length===0;
+ $("stampIconLabel").value=available.length?available[0][1]:"";
+ $("addStampIconBtn").disabled=available.length===0;
+}
+$("stampIconKey").addEventListener("change",()=>{$("stampIconLabel").value=stampIconCatalog[$("stampIconKey").value]||""});
+$("stampIconForm").addEventListener("submit",async e=>{
+ e.preventDefault();
+ const key=$("stampIconKey").value,label=$("stampIconLabel").value.trim();
+ if(!key||!label){toast("Simge ve görünen ad gerekli.",true);return}
+ try{
+  const sortOrder=stampIcons.reduce((max,item)=>Math.max(max,Number(item.sort_order)||0),0)+10;
+  const {error}=await db.from("campaign_stamp_icons").insert({icon_key:key,label,icon_name:key,sort_order:sortOrder,is_active:true});
+  if(error)throw error;
+  toast("Damga simgesi eklendi.");await loadStampIcons();
+ }catch(error){toast(error.message||"Simge eklenemedi.",true)}
+});
 async function loadTab(tab){
  try{
   if(tab==="overview")await loadOverview();
@@ -138,7 +171,7 @@ async function loadTab(tab){
   if(tab==="packages")await loadPackages();
   if(tab==="payments")await loadPayments();
   if(tab==="nfc")await loadNfc();
-  if(tab==="campaigns")await loadCampaigns();
+  if(tab==="campaigns")await Promise.all([loadCampaigns(),loadStampIcons()]);
  }catch(e){toast(e.message||"Veriler yüklenemedi.",true)}
 }
 async function activateTab(tab){
@@ -203,6 +236,7 @@ document.addEventListener("click",async e=>{
   }
   if(action==="revoke-tag"){const {data,error}=await db.functions.invoke("manage-nfc-tag",{body:{action:"revoke",tagId:id},headers:{"x-region":"eu-west-3"}});if(error)throw error;if(!data?.success)throw new Error(data?.error||"Etiket iptal edilemedi.");toast("NFC etiketi iptal edildi.");await loadNfc();}
   if(action==="toggle-campaign"){const {error}=await db.from("campaigns").update({is_active:btn.dataset.active==="true"}).eq("id",id);if(error)throw error;toast("Kampanya durumu güncellendi.");await loadCampaigns();}
+  if(action==="toggle-stamp-icon"){const {error}=await db.from("campaign_stamp_icons").update({is_active:btn.dataset.active==="true"}).eq("icon_key",id);if(error)throw error;toast("Damga simgesi durumu güncellendi.");await loadStampIcons();}
   if(action==="edit-campaign"){
    const {data:c,error}=await db.from("campaigns").select("id,cafe_id,title,benefit,audience").eq("id",id).single();if(error)throw error;
    const title=prompt("Kampanya başlığı",c.title);if(title===null)return;
