@@ -23,9 +23,11 @@ Deno.serve(async (request: Request) => {
   const { data: authData, error: authError } = await auth.auth.getUser();
   if (authError || !authData.user) return reply(401, { error: "Oturum doğrulanamadı." });
 
-  let body: { cafeId?: string };
+  let body: { cafeId?: string; campaignId?: string };
   try { body = await request.json(); } catch { return reply(400, { error: "Geçersiz istek." }); }
-  if (typeof body.cafeId !== "string" || !/^[0-9a-fA-F-]{36}$/.test(body.cafeId)) return reply(400, { error: "Geçersiz kafe." });
+  const isCampaignClaim = typeof body.campaignId === "string" && /^[0-9a-fA-F-]{36}$/.test(body.campaignId);
+  const isLegacyCafeClaim = typeof body.cafeId === "string" && /^[0-9a-fA-F-]{36}$/.test(body.cafeId);
+  if (!isCampaignClaim && !isLegacyCafeClaim) return reply(400, { error: "Geçersiz kampanya." });
 
   const admin = createClient(url, service, { auth: { persistSession: false, autoRefreshToken: false } });
   const { data: profile, error: profileError } = await admin.from("profiles").select("role,approval_status").eq("id", authData.user.id).maybeSingle();
@@ -33,15 +35,30 @@ Deno.serve(async (request: Request) => {
     return reply(403, { error: "Ödül talebi için onaylı müşteri hesabı gerekli." });
   }
 
-  const { data, error } = await admin.rpc("claim_cafe_reward", {
-    p_customer_id: authData.user.id,
-    p_cafe_id: body.cafeId,
-  });
+  const { data, error } = isCampaignClaim
+    ? await admin.rpc("claim_campaign_reward", {
+        p_customer_id: authData.user.id,
+        p_campaign_id: body.campaignId,
+      })
+    : await admin.rpc("claim_cafe_reward", {
+        p_customer_id: authData.user.id,
+        p_cafe_id: body.cafeId,
+      });
   if (error) {
     const message = error.message.toLowerCase();
     if (message.includes("not enough stamps")) return reply(409, { error: "Ödül için yeterli damgan yok." });
     if (message.includes("no active reward")) return reply(409, { error: "Bu işletmede aktif ödül bulunmuyor." });
     return reply(400, { error: "Ödül talebi oluşturulamadı." });
+  }
+  if (isCampaignClaim) {
+    const claim = Array.isArray(data) ? data[0] : data;
+    if (!claim?.claim_id || !claim?.redemption_code) return reply(500, { error: "Ödül kodu üretilemedi." });
+    return reply(200, {
+      success: true,
+      claimId: claim.claim_id,
+      code: claim.redemption_code,
+      message: "Ödül talebin oluşturuldu. Kodu işletme personeline göster.",
+    });
   }
   return reply(200, { success: true, claimId: data, message: "Ödül talebin oluşturuldu. Kodu kasiyere göster." });
 });
