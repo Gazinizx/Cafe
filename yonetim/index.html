@@ -27,16 +27,16 @@ label{display:block;font-size:13px;font-weight:650;margin:12px 0 6px}input,selec
 <button class="active" data-tab="overview">Genel bakış</button>
 <button data-tab="applications">İşletme başvuruları</button>
 <button data-tab="delivery">NFC teslimat</button>
-<button data-tab="packages">Abonelik paketleri</button>
-<button data-tab="payments">Nakit / havale</button>
+<button data-tab="packages" class="hidden">Abonelik paketleri</button>
+<button data-tab="payments" class="hidden">Nakit / havale</button>
 <button data-tab="nfc">NFC etiketleri</button>
 <button data-tab="campaigns">Kampanyalar</button>
 </nav></aside>
 <main>
 <section id="tab-overview">
 <div class="page-head"><div><h1>Genel bakış</h1><p>Platformun güncel durumu</p></div><button class="secondary" data-refresh>Yenile</button></div>
-<div class="cards"><div class="stat"><small>İşletmeler</small><strong id="statBusinesses">—</strong></div><div class="stat"><small>Onay bekleyen</small><strong id="statPending">—</strong></div><div class="stat"><small>Aktif abonelik</small><strong id="statSubs">—</strong></div><div class="stat"><small>Bekleyen tahsilat</small><strong id="statPayments">—</strong></div></div>
-<div class="panel"><h2>Yönetim notu</h2><div class="notice">Nakit ve banka havalesi tahsilatları yönetici onayıyla aboneliğe çevrilir. NFC damgaları yalnızca sunucu tarafında NTAG 424 DNA doğrulamasıyla verilir.</div></div>
+<div class="cards"><div class="stat"><small>İşletmeler</small><strong id="statBusinesses">—</strong></div><div class="stat"><small>Onay bekleyen</small><strong id="statPending">—</strong></div><div class="stat" style="display:none"><small>Aktif abonelik</small><strong id="statSubs">—</strong></div><div class="stat" style="display:none"><small>Bekleyen tahsilat</small><strong id="statPayments">—</strong></div></div>
+<div class="panel"><h2>Yönetim notu</h2><div class="notice">Paket ve ücretlendirme modeli sonraki geliştirme aşamasında açılacaktır. NFC ve QR damgaları sunucu tarafında doğrulanır.</div></div>
 </section>
 <section id="tab-applications" class="hidden"><div class="page-head"><div><h1>İşletme başvuruları</h1><p>Başvuruları incele ve işletmeleri etkinleştir.</p></div><button class="secondary" data-refresh>Yenile</button></div><div class="panel"><div id="applicationsTable" class="table-wrap"></div></div></section>
 <section id="tab-delivery" class="hidden"><div class="page-head"><div><h1>NFC etiketi teslimatı</h1><p>Her işletmeye bir adet etiket gönderilir; teslimat durumunu güncelle.</p></div><button class="secondary" data-refresh>Yenile</button></div><div class="panel"><div id="deliveryTable" class="table-wrap"></div></div></section>
