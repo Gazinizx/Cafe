@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:nfc_manager/nfc_manager.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -398,7 +399,7 @@ class LocalData {
   static Future<List<Map<String,dynamic>>> campaignMemberships() async {
     if (!_cloudReady) return [];
     final rows = await cloud.from('campaign_memberships')
-      .select('id,campaign_id,stamps,joined_at,campaigns(id,cafe_id,title,benefit,audience,is_active,starts_at,ends_at,stamps_required,reward_title,reward_description,stamp_icon,background_image_url,cafes(name,city,business_id))')
+      .select('id,campaign_id,stamps,joined_at,campaigns(id,cafe_id,title,benefit,audience,is_active,starts_at,ends_at,stamps_required,reward_title,reward_description,stamp_icon,background_image_url,cafes(name,city,business_id,latitude,longitude))')
       .eq('customer_id', cloud.auth.currentUser!.id)
       .order('joined_at', ascending: false);
     return (rows as List).map((raw) {
@@ -409,6 +410,8 @@ class LocalData {
       final cafe = cafeRaw is Map ? Map<String,dynamic>.from(cafeRaw) : <String,dynamic>{};
       campaign['businessName'] = cafe['name'] ?? 'İşletme';
       campaign['city'] = cafe['city'] ?? '';
+      campaign['latitude'] = cafe['latitude'];
+      campaign['longitude'] = cafe['longitude'];
       campaign['membershipId'] = row['id'];
       campaign['stamps'] = row['stamps'] ?? 0;
       campaign['joinedAt'] = row['joined_at'];
@@ -847,11 +850,86 @@ class CustomerCards extends StatefulWidget {
 }
 class _CustomerCardsState extends State<CustomerCards> {
   late Future<List<Map<String,dynamic>>> _future;
-  @override void initState() { super.initState(); _future = LocalData.campaignMemberships(); }
-  void _refresh() => setState(() => _future = LocalData.campaignMemberships());
+  @override void initState() { super.initState(); _future = _loadSortedCards(); }
+
+  Future<List<Map<String,dynamic>>> _loadSortedCards() async {
+    final cards = await LocalData.campaignMemberships();
+    Position? position;
+    try {
+      final permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.always || permission == LocationPermission.whileInUse) {
+        if (await Geolocator.isLocationServiceEnabled()) {
+          position = await Geolocator.getCurrentPosition(
+            locationSettings: const LocationSettings(accuracy: LocationAccuracy.medium),
+          );
+        }
+      }
+    } catch (_) {
+      position = null;
+    }
+    for (final card in cards) {
+      final latitude = (card['latitude'] as num?)?.toDouble();
+      final longitude = (card['longitude'] as num?)?.toDouble();
+      card['_distanceMeters'] = position != null && latitude != null && longitude != null
+        ? Geolocator.distanceBetween(position.latitude, position.longitude, latitude, longitude)
+        : null;
+    }
+    cards.sort((a, b) {
+      final distanceA = a['_distanceMeters'] as double?;
+      final distanceB = b['_distanceMeters'] as double?;
+      if (distanceA != null && distanceB != null && (distanceA - distanceB).abs() > 250) {
+        return distanceA.compareTo(distanceB);
+      }
+      if (distanceA != null && distanceB == null) return -1;
+      if (distanceA == null && distanceB != null) return 1;
+      final stampsA = (a['stamps'] as num?)?.toInt() ?? 0;
+      final stampsB = (b['stamps'] as num?)?.toInt() ?? 0;
+      final goalA = (a['stamps_required'] as num?)?.toInt() ?? 8;
+      final goalB = (b['stamps_required'] as num?)?.toInt() ?? 8;
+      final readyA = stampsA >= goalA;
+      final readyB = stampsB >= goalB;
+      if (readyA != readyB) return readyA ? -1 : 1;
+      if (distanceA != null && distanceB != null) return distanceA.compareTo(distanceB);
+      final joinedA = DateTime.tryParse(a['joinedAt']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      final joinedB = DateTime.tryParse(b['joinedAt']?.toString() ?? '') ?? DateTime.fromMillisecondsSinceEpoch(0);
+      return joinedB.compareTo(joinedA);
+    });
+    return cards;
+  }
+
+  void _refresh() => setState(() => _future = _loadSortedCards());
+
+  Future<void> _enableLocationSorting() async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.deniedForever) {
+        _message('Konum izni ayarlardan açılmalı.');
+        await Geolocator.openAppSettings();
+        return;
+      }
+      if (permission != LocationPermission.always && permission != LocationPermission.whileInUse) {
+        _message('Konum izni verilmedi. Kartlar akıllı varsayılan sırayla gösterilecek.');
+        return;
+      }
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        _message('Telefonun konum hizmeti kapalı.');
+        await Geolocator.openLocationSettings();
+        return;
+      }
+      _refresh();
+    } catch (_) {
+      _message('Konum alınamadı. Kartlar akıllı varsayılan sırayla gösterilecek.');
+    }
+  }
+
+  void _message(String message) {
+    if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+  }
 
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
     const Heading('Aktif Kampanyalarım', 'Eklediğin kampanyaların damgalarını ve ödüllerini takip et.'),
+    Align(alignment: Alignment.centerLeft, child: OutlinedButton.icon(onPressed: _enableLocationSorting, icon: const Icon(Icons.near_me_outlined), label: const Text('Yakınımdaki kartları öne çıkar'))),
     FutureBuilder<List<Map<String,dynamic>>>(
       future: _future,
       builder: (context, snapshot) {
@@ -892,6 +970,7 @@ class _CustomerCardsState extends State<CustomerCards> {
                   ))),
                   const SizedBox(height: 12),
                   Text('$stamps / $goal damga • ${campaign['reward_title'] ?? 'Ödül'}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700)),
+                  if (campaign['_distanceMeters'] is num) Text((campaign['_distanceMeters'] as num) < 1000 ? '${(campaign['_distanceMeters'] as num).round()} m uzaklıkta' : '${((campaign['_distanceMeters'] as num) / 1000).toStringAsFixed(1)} km uzaklıkta', style: const TextStyle(color: Colors.white70, fontSize: 12)),
                   const SizedBox(height: 8),
                   const Align(alignment: Alignment.centerRight, child: Text('Kartı aç  ›', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
                 ]),
@@ -1777,6 +1856,40 @@ class _BusinessSettingsState extends State<BusinessSettings> {
     }
   }
 
+  Future<void> _saveBranchLocation(Map<String,dynamic> branch) async {
+    try {
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.deniedForever) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Konum iznini telefon ayarlarından açmalısın.')));
+        await Geolocator.openAppSettings();
+        return;
+      }
+      if (permission != LocationPermission.always && permission != LocationPermission.whileInUse) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şube konumunu kaydetmek için konum izni gerekli.')));
+        return;
+      }
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Telefonun konum hizmeti kapalı.')));
+        await Geolocator.openLocationSettings();
+        return;
+      }
+      final position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(accuracy: LocationAccuracy.high),
+      );
+      await cloud.from('cafes').update({
+        'latitude': position.latitude,
+        'longitude': position.longitude,
+      }).eq('id', branch['id']);
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${branch['name']} şubesinin konumu kaydedildi.')));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(
+        error.toString().toLowerCase().contains('socket') ? 'Ağ bağlantısı yok.' : 'Şube konumu kaydedilemedi: $error',
+      )));
+    }
+  }
+
   Future<void> _addBranch() async {
     if (_branchName.text.trim().isEmpty || _branchCity.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şube adı ve şehir gerekli.')));
@@ -1857,7 +1970,9 @@ class _BusinessSettingsState extends State<BusinessSettings> {
       ..._branches.map((branch) => Card(child: ListTile(
         leading: Icon(branch['is_main_branch'] == true ? Icons.home_work : Icons.storefront, color: forest),
         title: Text(branch['name'].toString()),
-        subtitle: Text('${branch['city'] ?? ''} • ${branch['is_active'] == true ? 'Aktif' : 'Pasif'}${branch['is_main_branch'] == true ? ' • Ana şube' : ''}'),
+        subtitle: Text('${branch['city'] ?? ''} • ${branch['is_active'] == true ? 'Aktif' : 'Pasif'}${branch['is_main_branch'] == true ? ' • Ana şube' : ''}${branch['latitude'] != null && branch['longitude'] != null ? ' • Konum kayıtlı' : ' • Konum eksik'}'),
+        trailing: IconButton(tooltip: 'Bu şubenin konumunu kaydet', onPressed: () => _saveBranchLocation(branch),
+          icon: Icon(Icons.my_location, color: branch['latitude'] != null && branch['longitude'] != null ? forest : brown)),
       ))),
       const SizedBox(height: 8),
       TextField(controller: _branchName, decoration: const InputDecoration(labelText: 'Yeni şube adı')),

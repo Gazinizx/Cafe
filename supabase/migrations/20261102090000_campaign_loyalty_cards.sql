@@ -1,4 +1,15 @@
 -- Campaign-based loyalty cards. Additive migration: legacy cafe memberships and rewards remain intact.
+alter table public.cafes
+  add column if not exists latitude double precision,
+  add column if not exists longitude double precision;
+
+alter table public.cafes
+  drop constraint if exists cafes_location_coordinates_check,
+  add constraint cafes_location_coordinates_check check (
+    (latitude is null and longitude is null)
+    or (latitude between -90 and 90 and longitude between -180 and 180)
+  );
+
 alter table public.campaigns
   add column if not exists stamps_required integer not null default 8,
   add column if not exists reward_title text not null default 'Ödül',
