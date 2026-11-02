@@ -1379,10 +1379,14 @@ class BusinessAnalyticsSummary {
         campaignCounts.update(campaign, (count) => count + 1, ifAbsent: () => 1);
       }
     }
-    final names = <String, String>{
-      for (final campaign in campaigns)
-        campaign['id'].toString(): (campaign['title'] ?? 'Kampanya').toString(),
-    };
+    final names = <String, String>{};
+    for (final campaign in campaigns) {
+      final cafeRaw = campaign['cafes'];
+      final cafeName = cafeRaw is Map ? cafeRaw['name']?.toString() : null;
+      final title = (campaign['title'] ?? 'Kampanya').toString();
+      names[campaign['id'].toString()] =
+          cafeName == null || cafeName.isEmpty ? title : '$cafeName • $title';
+    }
     return BusinessAnalyticsSummary(
       totalStamps: events.length,
       uniqueCustomers: customers.length,
@@ -1418,7 +1422,7 @@ class _BusinessAnalyticsState extends State<BusinessAnalytics> {
       );
     }
     final campaignRows = await cloud.from('campaigns')
-        .select('id,title,is_active,cafe_id').inFilter('cafe_id', cafeIds)
+        .select('id,title,is_active,cafe_id,cafes(name)').inFilter('cafe_id', cafeIds)
         .order('created_at', ascending: false);
     final campaigns = (campaignRows as List).map((r) => Map<String, dynamic>.from(r as Map)).toList();
     final start = DateTime.now().toUtc().subtract(Duration(days: _days));
@@ -1439,7 +1443,8 @@ class _BusinessAnalyticsState extends State<BusinessAnalytics> {
     while (true) {
       final page = await cloud.from('reward_claims').select('id')
           .inFilter('cafe_id', cafeIds).eq('status', 'redeemed')
-          .gte('redeemed_at', start.toIso8601String()).range(offset, offset + 499);
+          .gte('redeemed_at', start.toIso8601String())
+          .order('redeemed_at', ascending: false).range(offset, offset + 499);
       final rows = page as List;
       redeemed += rows.length;
       if (rows.length < 500) break;
