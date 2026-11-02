@@ -1880,10 +1880,16 @@ class _BusinessQrPageState extends State<BusinessQrPage> {
   }
 }
 
+
 String? cafeQrTokenFromPayload(String? value) {
   if (value == null || !value.startsWith('CDQR:')) return null;
   final token = value.substring(5);
-  return RegExp(r'^[0-9a-f]{64} {
+  final validHex = token.length == 64 && token.codeUnits.every((unit) =>
+    (unit >= 48 && unit <= 57) || (unit >= 97 && unit <= 102));
+  return validHex ? token : null;
+}
+
+class CampaignQrScannerPage extends StatefulWidget {
   final String campaignId;
   const CampaignQrScannerPage({required this.campaignId, super.key});
   @override State<CampaignQrScannerPage> createState() => _CampaignQrScannerPageState();
@@ -1891,18 +1897,21 @@ String? cafeQrTokenFromPayload(String? value) {
 class _CampaignQrScannerPageState extends State<CampaignQrScannerPage> {
   bool _handled = false;
   String? _message;
+
   Future<void> _handle(String? raw) async {
     if (_handled) return;
     final token = cafeQrTokenFromPayload(raw);
     if (token == null) {
-      setState(() => _message = 'Bu Cafe Dünyam QR kodu değil.');
+      if (mounted) setState(() => _message = 'Bu Cafe Dünyam QR kodu değil.');
       return;
     }
     setState(() { _handled = true; _message = 'QR kod doğrulanıyor…'; });
     try {
-      final response = await cloud.functions.invoke('campaign-qr',
+      final response = await cloud.functions.invoke(
+        'campaign-qr',
         body: {'action': 'redeem', 'token': token, 'campaignId': widget.campaignId},
-        headers: const {'x-region': 'eu-west-3'});
+        headers: const {'x-region': 'eu-west-3'},
+      );
       final data = response.data;
       if (response.status != 200 || data is! Map) {
         throw Exception(data is Map ? (data['error'] ?? 'QR doğrulanamadı.') : 'QR doğrulanamadı.');
@@ -1911,25 +1920,38 @@ class _CampaignQrScannerPageState extends State<CampaignQrScannerPage> {
         if (mounted) Navigator.pop(context, true);
         return;
       }
-      if (mounted) setState(() { _handled = false; _message = (data['message'] ?? data['error'] ?? 'QR kabul edilmedi.').toString(); });
+      if (mounted) setState(() {
+        _handled = false;
+        _message = (data['message'] ?? data['error'] ?? 'QR kabul edilmedi.').toString();
+      });
     } catch (error) {
-      if (mounted) setState(() { _handled = false; _message = error.toString().replaceFirst('Exception: ', ''); });
+      if (mounted) setState(() {
+        _handled = false;
+        _message = error.toString().replaceFirst('Exception: ', '');
+      });
     }
   }
+
   @override Widget build(BuildContext context) => Scaffold(
     appBar: AppBar(title: const Text('QR kodu okut')),
     body: Stack(children: [
-      MobileScanner(
-        onDetect: (capture) {
-          if (capture.barcodes.isEmpty) return;
-          _handle(capture.barcodes.first.rawValue);
-        },
+      MobileScanner(onDetect: (capture) {
+        if (capture.barcodes.isEmpty) return;
+        _handle(capture.barcodes.first.rawValue);
+      }),
+      Align(
+        alignment: Alignment.bottomCenter,
+        child: Container(
+          width: double.infinity,
+          color: Colors.black87,
+          padding: const EdgeInsets.all(18),
+          child: Text(
+            _message ?? 'İşletmenin Cafe Dünyam QR kodunu kamera çerçevesine getir.',
+            style: const TextStyle(color: Colors.white),
+            textAlign: TextAlign.center,
+          ),
+        ),
       ),
-      Align(alignment: Alignment.bottomCenter, child: Container(
-        width: double.infinity, color: Colors.black87,
-        padding: const EdgeInsets.all(18),
-        child: Text(_message ?? 'İşletmenin Cafe Dünyam QR kodunu kamera çerçevesine getir.', style: const TextStyle(color: Colors.white), textAlign: TextAlign.center),
-      )),
     ]),
   );
 }
