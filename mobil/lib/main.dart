@@ -1295,7 +1295,7 @@ class _CustomerDealsState extends State<CustomerDeals> {
         if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
         final query = _search.text.trim().toLowerCase();
         final campaigns = snapshot.data!.where((c) => _isOpen(c) &&
-          ('${c['ownerName']} ${c['title']}'.toLowerCase().contains(query))).toList();
+          (c['ownerName'] ?? '').toString().toLowerCase().contains(query)).toList();
         if (campaigns.isEmpty) return const Padding(padding: EdgeInsets.all(20), child: Text('Aramana uygun aktif kampanya bulunamadı.'));
         return Column(children: campaigns.map((campaign) {
           final id = campaign['id'].toString();
