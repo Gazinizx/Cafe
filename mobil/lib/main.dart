@@ -1351,20 +1351,206 @@ class ProfilePage extends StatelessWidget{final Map<String,dynamic> user;const P
  ]);
 }
 
+
+class BusinessAnalyticsSummary {
+  final int totalStamps, uniqueCustomers, repeatCustomers, redeemedRewards;
+  final int campaignCount, activeCampaignCount;
+  final Map<String, int> stampsByCampaign;
+  const BusinessAnalyticsSummary({
+    required this.totalStamps, required this.uniqueCustomers,
+    required this.repeatCustomers, required this.redeemedRewards,
+    required this.campaignCount, required this.activeCampaignCount,
+    required this.stampsByCampaign,
+  });
+  factory BusinessAnalyticsSummary.fromRows({
+    required List<Map<String, dynamic>> events,
+    required List<Map<String, dynamic>> campaigns,
+    required int redeemedRewards,
+  }) {
+    final customers = <String, int>{};
+    final campaignCounts = <String, int>{};
+    for (final event in events) {
+      final customer = event['customer_id']?.toString();
+      final campaign = event['campaign_id']?.toString();
+      if (customer != null && customer.isNotEmpty) {
+        customers.update(customer, (count) => count + 1, ifAbsent: () => 1);
+      }
+      if (campaign != null && campaign.isNotEmpty) {
+        campaignCounts.update(campaign, (count) => count + 1, ifAbsent: () => 1);
+      }
+    }
+    final names = <String, String>{
+      for (final campaign in campaigns)
+        campaign['id'].toString(): (campaign['title'] ?? 'Kampanya').toString(),
+    };
+    return BusinessAnalyticsSummary(
+      totalStamps: events.length,
+      uniqueCustomers: customers.length,
+      repeatCustomers: customers.values.where((count) => count > 1).length,
+      redeemedRewards: redeemedRewards,
+      campaignCount: campaigns.length,
+      activeCampaignCount: campaigns.where((c) => c['is_active'] == true).length,
+      stampsByCampaign: {
+        for (final entry in campaignCounts.entries)
+          (names[entry.key] ?? 'Kampanya'): entry.value,
+      },
+    );
+  }
+}
+
+class BusinessAnalytics extends StatefulWidget {
+  final Map<String, dynamic> user;
+  const BusinessAnalytics({required this.user, super.key});
+  @override State<BusinessAnalytics> createState() => _BusinessAnalyticsState();
+}
+class _BusinessAnalyticsState extends State<BusinessAnalytics> {
+  int _days = 30;
+  late Future<BusinessAnalyticsSummary> _future;
+  @override void initState() { super.initState(); _future = _load(); }
+
+  Future<BusinessAnalyticsSummary> _load() async {
+    final cafeRows = await cloud.from('cafes').select('id').eq('business_id', widget.user['id']);
+    final cafeIds = (cafeRows as List).map((r) => r['id'].toString()).toList();
+    if (cafeIds.isEmpty) {
+      return const BusinessAnalyticsSummary(
+        totalStamps: 0, uniqueCustomers: 0, repeatCustomers: 0,
+        redeemedRewards: 0, campaignCount: 0, activeCampaignCount: 0, stampsByCampaign: {},
+      );
+    }
+    final campaignRows = await cloud.from('campaigns')
+        .select('id,title,is_active,cafe_id').inFilter('cafe_id', cafeIds)
+        .order('created_at', ascending: false);
+    final campaigns = (campaignRows as List).map((r) => Map<String, dynamic>.from(r as Map)).toList();
+    final start = DateTime.now().toUtc().subtract(Duration(days: _days));
+    final events = <Map<String, dynamic>>[];
+    var offset = 0;
+    while (true) {
+      final page = await cloud.from('campaign_stamp_events')
+          .select('customer_id,campaign_id,created_at').inFilter('cafe_id', cafeIds)
+          .gte('created_at', start.toIso8601String())
+          .order('created_at', ascending: false).range(offset, offset + 499);
+      final rows = (page as List).map((r) => Map<String, dynamic>.from(r as Map)).toList();
+      events.addAll(rows);
+      if (rows.length < 500) break;
+      offset += 500;
+    }
+    var redeemed = 0;
+    offset = 0;
+    while (true) {
+      final page = await cloud.from('reward_claims').select('id')
+          .inFilter('cafe_id', cafeIds).eq('status', 'redeemed')
+          .gte('redeemed_at', start.toIso8601String()).range(offset, offset + 499);
+      final rows = page as List;
+      redeemed += rows.length;
+      if (rows.length < 500) break;
+      offset += 500;
+    }
+    return BusinessAnalyticsSummary.fromRows(events: events, campaigns: campaigns, redeemedRewards: redeemed);
+  }
+
+  Widget _metric(String label, int value, IconData icon) => Expanded(
+    child: Card(child: Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, color: forest, size: 22), const SizedBox(height: 10),
+        Text(value.toString(), style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: forest)),
+        const SizedBox(height: 3), Text(label, style: const TextStyle(fontSize: 12, color: Colors.black54)),
+      ]),
+    )),
+  );
+
+  @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
+    const Heading('İşletme istatistikleri', 'Kampanyalarının ve müşteri etkileşiminin performansını takip et.'),
+    Wrap(spacing: 8, children: [7, 30, 90].map((days) => ChoiceChip(
+      label: Text('Son $days gün'), selected: _days == days,
+      onSelected: (selected) {
+        if (!selected) return;
+        setState(() { _days = days; _future = _load(); });
+      },
+    )).toList()),
+    const SizedBox(height: 12),
+    FutureBuilder<BusinessAnalyticsSummary>(
+      future: _future,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Padding(padding: EdgeInsets.all(32), child: Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError) {
+          return Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('İstatistikler yüklenemedi.'),
+              Text(snapshot.error.toString(), style: const TextStyle(fontSize: 12, color: Colors.black54)),
+              TextButton.icon(onPressed: () => setState(() => _future = _load()),
+                icon: const Icon(Icons.refresh), label: const Text('Tekrar dene')),
+            ],
+          )));
+        }
+        final data = snapshot.data!;
+        final sorted = data.stampsByCampaign.entries.toList()..sort((a, b) => b.value.compareTo(a.value));
+        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [
+            _metric('Toplam damga', data.totalStamps, Icons.local_activity_outlined),
+            _metric('Tekil müşteri', data.uniqueCustomers, Icons.people_outline),
+          ]),
+          Row(children: [
+            _metric('Tekrar damga alan', data.repeatCustomers, Icons.repeat),
+            _metric('Teslim edilen ödül', data.redeemedRewards, Icons.card_giftcard_outlined),
+          ]),
+          Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Kampanya özeti', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: forest)),
+              const SizedBox(height: 12),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Toplam kampanya'), Text(data.campaignCount.toString(), style: const TextStyle(fontWeight: FontWeight.w800)),
+              ]),
+              const SizedBox(height: 6),
+              Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                const Text('Aktif kampanya'), Text(data.activeCampaignCount.toString(), style: const TextStyle(fontWeight: FontWeight.w800)),
+              ]),
+            ],
+          ))),
+          const SizedBox(height: 8),
+          const Text('Kampanya performansı', style: TextStyle(fontSize: 19, fontWeight: FontWeight.w900, color: forest)),
+          if (sorted.isEmpty)
+            const Card(child: Padding(padding: EdgeInsets.all(16), child: Text('Seçilen dönemde henüz damga hareketi yok.')))
+          else
+            ...sorted.map((entry) {
+              final max = sorted.first.value;
+              final progress = max == 0 ? 0.0 : entry.value / max;
+              return Card(child: Padding(padding: const EdgeInsets.all(14), child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    Expanded(child: Text(entry.key, style: const TextStyle(fontWeight: FontWeight.w800))),
+                    Text(entry.value.toString() + ' damga', style: const TextStyle(fontWeight: FontWeight.w800, color: forest)),
+                  ]),
+                  const SizedBox(height: 9), LinearProgressIndicator(value: progress, minHeight: 7),
+                ],
+              )));
+            }),
+          const Padding(padding: EdgeInsets.only(top: 12), child: Text(
+            'Tekrar damga alan müşteri: seçilen dönemde birden fazla damga hareketi bulunan müşteri sayısıdır.',
+            style: TextStyle(fontSize: 12, color: Colors.black54),
+          )),
+        ]);
+      },
+    ),
+  ]);
+}
+
 class BusinessShell extends StatefulWidget{final Map<String,dynamic> user;const BusinessShell({required this.user,super.key});@override State<BusinessShell> createState()=>_BusinessShellState();}
 class _BusinessShellState extends State<BusinessShell>{
  int tab=0;
  @override Widget build(BuildContext context)=>Scaffold(appBar:AppBar(title:const Text('Cafe Dünyam • İşletme')),body:SafeArea(child:IndexedStack(index:tab,children:[
  BusinessDashboard(user:widget.user),
  BusinessDeals(user:widget.user),
+ BusinessAnalytics(user:widget.user),
  BusinessRewardSettings(user:widget.user),
- BusinessBilling(user:widget.user),
  BusinessSettings(user:widget.user),
  ])),bottomNavigationBar:NavigationBar(selectedIndex:tab,onDestinationSelected:(i)=>setState(()=>tab=i),destinations:const[
  NavigationDestination(icon:Icon(Icons.dashboard_outlined),label:'Panel'),
  NavigationDestination(icon:Icon(Icons.campaign_outlined),label:'Kampanyalar'),
+ NavigationDestination(icon:Icon(Icons.insights_outlined),label:'İstatistik'),
  NavigationDestination(icon:Icon(Icons.card_giftcard_outlined),label:'Ödül'),
- NavigationDestination(icon:Icon(Icons.payments_outlined),label:'Paket'),
  NavigationDestination(icon:Icon(Icons.storefront_outlined),label:'İşletmem'),
  ]));
 }
