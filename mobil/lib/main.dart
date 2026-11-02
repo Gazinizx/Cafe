@@ -1571,12 +1571,22 @@ class BusinessDeals extends StatefulWidget {
 }
 class _BusinessDealsState extends State<BusinessDeals> {
   final title = TextEditingController(), benefit = TextEditingController();
-  String audience = 'Herkes';
+  final goal = TextEditingController(text: '8');
+  final rewardTitle = TextEditingController();
+  final rewardDescription = TextEditingController();
+  final ImagePicker _picker = ImagePicker();
+  String audience = 'Herkes', stampIcon = 'coffee';
   bool busy = false;
+  XFile? _backgroundImage;
+  DateTime? _endsAt;
   List<Map<String,dynamic>> _branches = [];
   String? _selectedCafeId;
+
   @override void initState() { super.initState(); _loadBranches(); }
-  @override void dispose() { title.dispose(); benefit.dispose(); super.dispose(); }
+  @override void dispose() {
+    title.dispose(); benefit.dispose(); goal.dispose(); rewardTitle.dispose(); rewardDescription.dispose(); super.dispose();
+  }
+
   Future<void> _loadBranches() async {
     try {
       final rows = await cloud.from('cafes').select('id,name,is_main_branch')
@@ -1586,86 +1596,110 @@ class _BusinessDealsState extends State<BusinessDeals> {
       if (mounted) setState(() {});
     } catch (error) { _reportSyncError(error); }
   }
+
   bool _canManage(Map<String,dynamic> d) => widget.user['role'] == 'admin' || d['ownerEmail'] == widget.user['email'];
   void _reportSyncError(Object error) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Buluta kaydedilemedi: $error')),
-    );
+    final text = error.toString().toLowerCase().contains('socket') ? 'Ağ bağlantısı yok.' : 'Buluta kaydedilemedi: $error';
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
+
+  Future<void> _pickBackground() async {
+    try {
+      final file = await _picker.pickImage(source: ImageSource.gallery, imageQuality: 88, maxWidth: 1800);
+      if (file != null && mounted) setState(() => _backgroundImage = file);
+    } catch (error) { _reportSyncError(error); }
+  }
+
+  Future<String?> _uploadBackground(String campaignId) async {
+    final file = _backgroundImage;
+    if (file == null) return null;
+    final lower = file.name.toLowerCase();
+    final extension = lower.endsWith('.png') ? 'png' : lower.endsWith('.webp') ? 'webp' : 'jpg';
+    final contentType = extension == 'png' ? 'image/png' : extension == 'webp' ? 'image/webp' : 'image/jpeg';
+    final path = '${cloud.auth.currentUser!.id}/$campaignId.$extension';
+    await cloud.storage.from('campaign-backgrounds').uploadBinary(
+      path, await file.readAsBytes(),
+      fileOptions: FileOptions(contentType: contentType, upsert: true),
+    );
+    return cloud.storage.from('campaign-backgrounds').getPublicUrl(path);
+  }
+
   Future<void> _add() async {
-    if (title.text.trim().isEmpty || benefit.text.trim().isEmpty) return;
+    final targetCafe = _selectedCafeId;
+    final stampGoal = int.tryParse(goal.text.trim());
+    if (targetCafe == null || title.text.trim().isEmpty || benefit.text.trim().isEmpty ||
+        stampGoal == null || stampGoal < 1 || stampGoal > 100 || rewardTitle.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şube, kampanya adı, avantaj, 1–100 damga hedefi ve ödül adını doldur.')));
+      return;
+    }
     setState(() => busy = true);
     try {
-      final deals = await LocalData.list(dealsKey, starterDeals);
-      deals.insert(0, {'id':'local-${DateTime.now().microsecondsSinceEpoch}','title':title.text.trim(),'benefit':benefit.text.trim(),'audience':audience,'cafeId':_selectedCafeId ?? widget.user['cafeId'] ?? widget.user['email'],'active':true,'ownerEmail':widget.user['email'],'ownerName':widget.user['cafeName'] ?? widget.user['name']});
-      await LocalData.saveList(dealsKey, deals);
-      title.clear(); benefit.clear();
-      if (mounted) setState(() {});
-    } catch (error) {
-      _reportSyncError(error);
-    } finally {
-      if (mounted) setState(() => busy = false);
-    }
+      final created = await cloud.from('campaigns').insert({
+        'cafe_id': targetCafe,
+        'title': title.text.trim(),
+        'benefit': benefit.text.trim(),
+        'audience': audience,
+        'stamps_required': stampGoal,
+        'reward_title': rewardTitle.text.trim(),
+        'reward_description': rewardDescription.text.trim(),
+        'stamp_icon': stampIcon,
+        'starts_at': DateTime.now().toUtc().toIso8601String(),
+        'ends_at': _endsAt?.add(const Duration(hours: 23, minutes: 59)).toUtc().toIso8601String(),
+        'is_active': true,
+      }).select('id').single();
+      final campaignId = created['id'].toString();
+      final imageUrl = await _uploadBackground(campaignId);
+      if (imageUrl != null) {
+        await cloud.from('campaigns').update({'background_image_url': imageUrl}).eq('id', campaignId);
+      }
+      title.clear(); benefit.clear(); goal.text = '8'; rewardTitle.clear(); rewardDescription.clear();
+      if (mounted) setState(() { _backgroundImage = null; _endsAt = null; stampIcon = 'coffee'; });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sadakat kampanyası oluşturuldu.')));
+    } catch (error) { _reportSyncError(error); }
+    finally { if (mounted) setState(() => busy = false); }
   }
-  Future<void> _edit(Map<String,dynamic> d) async {
-    if (!_canManage(d)) return;
-    final editTitle = TextEditingController(text: '${d['title']}');
-    final editBenefit = TextEditingController(text: '${d['benefit']}');
+
+  Future<void> _edit(Map<String,dynamic> campaign) async {
+    if (!_canManage(campaign)) return;
+    final editTitle = TextEditingController(text: '${campaign['title']}');
+    final editBenefit = TextEditingController(text: '${campaign['benefit']}');
+    final editGoal = TextEditingController(text: '${campaign['stampsRequired'] ?? 8}');
+    final editReward = TextEditingController(text: '${campaign['rewardTitle'] ?? 'Ödül'}');
     final result = await showDialog<bool>(context: context, builder: (context) => AlertDialog(
-      title: const Text('Kampanyayı düzenle'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
+      title: const Text('Kampanya kartını düzenle'),
+      content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
         TextField(controller: editTitle, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
-        TextField(controller: editBenefit, decoration: const InputDecoration(labelText: 'İndirim / avantaj')),
-      ]),
+        TextField(controller: editBenefit, decoration: const InputDecoration(labelText: 'Avantaj açıklaması')),
+        TextField(controller: editGoal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Damga hedefi')),
+        TextField(controller: editReward, decoration: const InputDecoration(labelText: 'Ödül adı')),
+      ])),
       actions: [TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')), FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Kaydet'))],
     ));
     try {
-      if (result == true && editTitle.text.trim().isNotEmpty && editBenefit.text.trim().isNotEmpty) {
-        final deals = await LocalData.list(dealsKey, starterDeals);
-        final i = deals.indexWhere((x) => x['id'] == d['id']);
-        if (i >= 0 && _canManage(deals[i])) {
-          deals[i]['title'] = editTitle.text.trim();
-          deals[i]['benefit'] = editBenefit.text.trim();
-          await LocalData.saveList(dealsKey, deals);
-          if (mounted) setState(() {});
-        }
-      }
-    } catch (error) {
-      _reportSyncError(error);
-    } finally {
-      editTitle.dispose();
-      editBenefit.dispose();
-    }
-  }
-  Future<void> _toggle(Map<String,dynamic> d) async {
-    if (!_canManage(d)) return;
-    try {
-      final deals = await LocalData.list(dealsKey, starterDeals);
-      final i = deals.indexWhere((x) => x['id'] == d['id']);
-      if (i >= 0) {
-        deals[i]['active'] = !(deals[i]['active'] == true);
-        await LocalData.saveList(dealsKey, deals);
+      final newGoal = int.tryParse(editGoal.text.trim());
+      if (result == true && editTitle.text.trim().isNotEmpty && editBenefit.text.trim().isNotEmpty &&
+          editReward.text.trim().isNotEmpty && newGoal != null && newGoal >= 1 && newGoal <= 100) {
+        await cloud.from('campaigns').update({
+          'title': editTitle.text.trim(), 'benefit': editBenefit.text.trim(),
+          'stamps_required': newGoal, 'reward_title': editReward.text.trim(),
+        }).eq('id', campaign['id']);
         if (mounted) setState(() {});
       }
-    } catch (error) {
-      _reportSyncError(error);
-    }
+    } catch (error) { _reportSyncError(error); }
+    finally { editTitle.dispose(); editBenefit.dispose(); editGoal.dispose(); editReward.dispose(); }
   }
-  Future<void> _delete(String id) async {
+
+  Future<void> _toggle(Map<String,dynamic> campaign) async {
+    if (!_canManage(campaign)) return;
     try {
-      final deals = await LocalData.list(dealsKey, starterDeals);
-      final target = deals.where((d) => d['id'] == id).toList();
-      if (target.isEmpty || !_canManage(target.first)) return;
-      deals.removeWhere((d) => d['id'] == id);
-      await LocalData.saveList(dealsKey, deals);
+      await cloud.from('campaigns').update({'is_active': campaign['active'] != true}).eq('id', campaign['id']);
       if (mounted) setState(() {});
-    } catch (error) {
-      _reportSyncError(error);
-    }
+    } catch (error) { _reportSyncError(error); }
   }
+
   @override Widget build(BuildContext context) => ListView(padding: const EdgeInsets.all(20), children: [
-    const Heading('Kampanyalar', 'Yalnızca kendi kampanyalarını yönetebilirsin.'),
+    const Heading('Kampanyalarım', 'Her kampanya kendi damga hedefi ve ödülü olan ayrı bir karttır.'),
     DropdownButtonFormField<String>(
       value: _selectedCafeId,
       decoration: const InputDecoration(labelText: 'Kampanyanın yayınlanacağı şube'),
@@ -1675,8 +1709,40 @@ class _BusinessDealsState extends State<BusinessDeals> {
     const SizedBox(height: 10),
     TextField(controller: title, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
     const SizedBox(height: 10),
-    TextField(controller: benefit, decoration: const InputDecoration(labelText: 'İndirim / avantaj açıklaması')),
+    TextField(controller: benefit, decoration: const InputDecoration(labelText: 'Kampanya açıklaması / avantaj')),
     const SizedBox(height: 10),
+    TextField(controller: goal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Ödül için gereken damga sayısı (1–100)')),
+    const SizedBox(height: 10),
+    TextField(controller: rewardTitle, decoration: const InputDecoration(labelText: 'Ödül adı', hintText: 'Örn. Ücretsiz kahve')),
+    const SizedBox(height: 10),
+    TextField(controller: rewardDescription, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Ödül açıklaması')),
+    const SizedBox(height: 10),
+    DropdownButtonFormField<String>(
+      value: stampIcon,
+      decoration: const InputDecoration(labelText: 'Damga simgesi'),
+      items: const [
+        DropdownMenuItem(value: 'coffee', child: Text('Kahve')),
+        DropdownMenuItem(value: 'cake', child: Text('Pasta / tatlı')),
+        DropdownMenuItem(value: 'stamp', child: Text('Damga')),
+        DropdownMenuItem(value: 'pizza', child: Text('Pizza')),
+        DropdownMenuItem(value: 'ice_cream', child: Text('Dondurma')),
+        DropdownMenuItem(value: 'sandwich', child: Text('Sandviç')),
+        DropdownMenuItem(value: 'star', child: Text('Yıldız')),
+        DropdownMenuItem(value: 'heart', child: Text('Kalp')),
+      ],
+      onChanged: (value) => setState(() => stampIcon = value ?? 'coffee'),
+    ),
+    const SizedBox(height: 10),
+    OutlinedButton.icon(onPressed: _pickBackground, icon: const Icon(Icons.image_outlined),
+      label: Text(_backgroundImage == null ? 'Kart arka plan görseli seç' : 'Görsel seçildi: ${_backgroundImage!.name}')),
+    if (_endsAt != null) Text('Kampanya bitişi: ${_endsAt!.day}.${_endsAt!.month}.${_endsAt!.year}'),
+    TextButton.icon(onPressed: () async {
+      final date = await showDatePicker(context: context, initialDate: _endsAt ?? DateTime.now().add(const Duration(days: 30)),
+        firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 730)));
+      if (date != null) setState(() => _endsAt = date);
+    }, icon: const Icon(Icons.event), label: Text(_endsAt == null ? 'İsteğe bağlı bitiş tarihi ekle' : 'Bitiş tarihini değiştir')),
+    if (_endsAt != null) TextButton(onPressed: () => setState(() => _endsAt = null), child: const Text('Bitiş tarihini kaldır')),
+    const SizedBox(height: 8),
     DropdownButtonFormField<String>(value: audience, decoration: const InputDecoration(labelText: 'Hedef kitle'), items: const [
       DropdownMenuItem(value: 'Herkes', child: Text('Herkes')),
       DropdownMenuItem(value: 'Öğrenci', child: Text('Öğrenci')),
@@ -1684,25 +1750,26 @@ class _BusinessDealsState extends State<BusinessDeals> {
     ], onChanged: (v) => setState(() => audience = v ?? 'Herkes')),
     const SizedBox(height: 12),
     FilledButton.icon(onPressed: busy ? null : _add, icon: const Icon(Icons.add), label: Text(busy ? 'Kaydediliyor…' : 'Kampanya oluştur')),
-    const SizedBox(height: 16),
-    const Text('Yönetebildiğin kampanyalar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19)),
-    FutureBuilder<List<Map<String,dynamic>>>(future: LocalData.list(dealsKey, starterDeals), builder: (context, s) {
-      if (s.hasError) return Center(child: Padding(padding: const EdgeInsets.all(16), child: Text('Kampanyaların yüklenmesi başarısız: ${s.error}')));
-      if (!s.hasData) return const Center(child: CircularProgressIndicator());
-      final visible = s.data!.where((d) => _canManage(d)).toList();
+    const SizedBox(height: 20),
+    const Text('Yönettiğin kampanyalar', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 19)),
+    FutureBuilder<List<Map<String,dynamic>>>(future: LocalData.list(dealsKey, starterDeals), builder: (context, snapshot) {
+      if (snapshot.hasError) return Text('Kampanyalar yüklenemedi: ${snapshot.error}');
+      if (!snapshot.hasData) return const Center(child: CircularProgressIndicator());
+      final visible = snapshot.data!.where(_canManage).toList();
       if (visible.isEmpty) return const Padding(padding: EdgeInsets.all(12), child: Text('Henüz sana ait kampanya yok.'));
-      return Column(children: visible.map((d) => Card(child: ListTile(
-        title: Text('${d['title']}'),
-        subtitle: Text('${d['benefit']}\\nDurum: ${d['active'] == true ? 'Aktif' : 'Pasif'}'),
+      return Column(children: visible.map((campaign) => Card(child: ListTile(
+        title: Text('${campaign['title']}'),
+        subtitle: Text('${campaign['benefit']}\n${campaign['stampsRequired'] ?? 8} damga • ${campaign['rewardTitle'] ?? 'Ödül'} • Durum: ${campaign['active'] == true ? 'Aktif' : 'Arşivde'}'),
         isThreeLine: true,
-        trailing: PopupMenuButton<String>(onSelected: (v) { if (v == 'edit') _edit(d); else if (v == 'toggle') _toggle(d); else _delete('${d['id']}'); }, itemBuilder: (_) => const [
+        trailing: PopupMenuButton<String>(onSelected: (value) {
+          if (value == 'edit') _edit(campaign);
+          if (value == 'toggle') _toggle(campaign);
+        }, itemBuilder: (_) => const [
           PopupMenuItem(value: 'edit', child: Text('Düzenle')),
-          PopupMenuItem(value: 'toggle', child: Text('Aktif / pasif değiştir')),
-          PopupMenuItem(value: 'delete', child: Text('Sil')),
+          PopupMenuItem(value: 'toggle', child: Text('Aktif / arşivle')),
         ]),
       ))).toList());
     }),
-    const LocalModeNote(),
   ]);
 }
 
