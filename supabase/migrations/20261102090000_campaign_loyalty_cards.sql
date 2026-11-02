@@ -54,6 +54,9 @@ create index if not exists campaign_stamp_events_campaign_customer_idx on public
 alter table public.campaign_memberships enable row level security;
 alter table public.campaign_stamp_events enable row level security;
 
+grant select, insert on public.campaign_memberships to authenticated;
+grant select on public.campaign_stamp_events to authenticated;
+
 drop policy if exists campaign_memberships_read_participant on public.campaign_memberships;
 create policy campaign_memberships_read_participant on public.campaign_memberships
 for select to authenticated
