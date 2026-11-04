@@ -272,6 +272,7 @@ class LocalData {
             'ownerName': cafe['name'] ?? 'Kafe', 'city': cafe['city'] ?? '',
             'startsAt': r['starts_at'], 'endsAt': r['ends_at'],
             'stampsRequired': r['stamps_required'] ?? 8,
+            'firstJoinBonusStamps': r['first_join_bonus_stamps'] ?? 0,
             'rewardTitle': r['reward_title'] ?? 'Ödül',
             'rewardDescription': r['reward_description'] ?? '',
             'stampIcon': r['stamp_icon'] ?? 'coffee',
@@ -2244,6 +2245,7 @@ class BusinessDeals extends StatefulWidget {
 class _BusinessDealsState extends State<BusinessDeals> {
   final title = TextEditingController(), benefit = TextEditingController();
   final goal = TextEditingController(text: '8');
+  final firstJoinBonus = TextEditingController(text: '0');
   final rewardTitle = TextEditingController();
   final rewardDescription = TextEditingController();
   final ImagePicker _picker = ImagePicker();
@@ -2257,7 +2259,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
 
   @override void initState() { super.initState(); _loadBranches(); }
   @override void dispose() {
-    title.dispose(); benefit.dispose(); goal.dispose(); rewardTitle.dispose(); rewardDescription.dispose(); super.dispose();
+    title.dispose(); benefit.dispose(); goal.dispose(); firstJoinBonus.dispose(); rewardTitle.dispose(); rewardDescription.dispose(); super.dispose();
   }
 
   Future<void> _loadBranches() async {
@@ -2305,8 +2307,11 @@ class _BusinessDealsState extends State<BusinessDeals> {
     final targetCafe = _selectedCafeId;
     final stampGoal = int.tryParse(goal.text.trim());
     if (targetCafe == null || title.text.trim().isEmpty || benefit.text.trim().isEmpty ||
-        stampGoal == null || stampGoal < 1 || stampGoal > 100 || rewardTitle.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şube, kampanya adı, avantaj, 1–100 damga hedefi ve ödül adını doldur.')));
+        stampGoal == null || stampGoal < 1 || stampGoal > 100 ||
+        (int.tryParse(firstJoinBonus.text.trim().isEmpty ? '0' : firstJoinBonus.text.trim()) ?? -1) < 0 ||
+        (int.tryParse(firstJoinBonus.text.trim().isEmpty ? '0' : firstJoinBonus.text.trim()) ?? 999) >= stampGoal ||
+        rewardTitle.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Şube, kampanya adı, avantaj, 1–100 toplam damga, hedefin altında hediye damga ve ödül adını doldur.')));
       return;
     }
     setState(() => busy = true);
@@ -2317,6 +2322,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
         'benefit': benefit.text.trim(),
         'audience': audience,
         'stamps_required': stampGoal,
+        'first_join_bonus_stamps': int.parse(firstJoinBonus.text.trim().isEmpty ? '0' : firstJoinBonus.text.trim()),
         'reward_title': rewardTitle.text.trim(),
         'reward_description': rewardDescription.text.trim(),
         'stamp_icon': stampIcon,
@@ -2329,7 +2335,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
       if (imageUrl != null) {
         await cloud.from('campaigns').update({'background_image_url': imageUrl}).eq('id', campaignId);
       }
-      title.clear(); benefit.clear(); goal.text = '8'; rewardTitle.clear(); rewardDescription.clear();
+      title.clear(); benefit.clear(); goal.text = '8'; firstJoinBonus.text = '0'; rewardTitle.clear(); rewardDescription.clear();
       if (mounted) setState(() { _backgroundImage = null; _endsAt = null; stampIcon = 'coffee'; });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sadakat kampanyası oluşturuldu.')));
     } catch (error) { _reportSyncError(error); }
@@ -2341,6 +2347,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
     final editTitle = TextEditingController(text: '${campaign['title']}');
     final editBenefit = TextEditingController(text: '${campaign['benefit']}');
     final editGoal = TextEditingController(text: '${campaign['stampsRequired'] ?? 8}');
+    final editFirstJoinBonus = TextEditingController(text: '${campaign['firstJoinBonusStamps'] ?? 0}');
     final editReward = TextEditingController(text: '${campaign['rewardTitle'] ?? 'Ödül'}');
     final editDescription = TextEditingController(text: '${campaign['rewardDescription'] ?? ''}');
     XFile? editBackground;
@@ -2352,7 +2359,8 @@ class _BusinessDealsState extends State<BusinessDeals> {
         content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
           TextField(controller: editTitle, decoration: const InputDecoration(labelText: 'Kampanya başlığı')),
           TextField(controller: editBenefit, decoration: const InputDecoration(labelText: 'Avantaj açıklaması')),
-          TextField(controller: editGoal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Damga hedefi')),
+          TextField(controller: editGoal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Toplam damga sayısı')),
+          TextField(controller: editFirstJoinBonus, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'İlk katılıma özel hediye damga (0 = yok)')),
           TextField(controller: editReward, decoration: const InputDecoration(labelText: 'Ödül adı')),
           TextField(controller: editDescription, minLines: 2, maxLines: 3, decoration: const InputDecoration(labelText: 'Ödül açıklaması')),
           const SizedBox(height: 10),
@@ -2392,13 +2400,16 @@ class _BusinessDealsState extends State<BusinessDeals> {
       final newGoal = int.tryParse(editGoal.text.trim());
       if (result == true) {
         if (editTitle.text.trim().isEmpty || editBenefit.text.trim().isEmpty ||
-            editReward.text.trim().isEmpty || newGoal == null || newGoal < 1 || newGoal > 100) {
+            editReward.text.trim().isEmpty || newGoal == null || newGoal < 1 || newGoal > 100 ||
+            (int.tryParse(editFirstJoinBonus.text.trim()) ?? -1) < 0 ||
+            (int.tryParse(editFirstJoinBonus.text.trim()) ?? 999) >= newGoal) {
           throw StateError('Başlık, avantaj, ödül ve 1–100 arası damga hedefi gerekli.');
         }
         final updates = <String,dynamic>{
           'title': editTitle.text.trim(),
           'benefit': editBenefit.text.trim(),
           'stamps_required': newGoal,
+          'first_join_bonus_stamps': int.parse(editFirstJoinBonus.text.trim()),
           'reward_title': editReward.text.trim(),
           'reward_description': editDescription.text.trim(),
           'stamp_icon': editIcon,
@@ -2417,7 +2428,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
       }
     } catch (error) { _reportSyncError(error); }
     finally {
-      editTitle.dispose(); editBenefit.dispose(); editGoal.dispose(); editReward.dispose(); editDescription.dispose();
+      editTitle.dispose(); editBenefit.dispose(); editGoal.dispose(); editFirstJoinBonus.dispose(); editReward.dispose(); editDescription.dispose();
     }
   }
   Future<void> _toggle(Map<String,dynamic> campaign) async {
@@ -2441,7 +2452,8 @@ class _BusinessDealsState extends State<BusinessDeals> {
     const SizedBox(height: 10),
     TextField(controller: benefit, decoration: const InputDecoration(labelText: 'Kampanya açıklaması / avantaj')),
     const SizedBox(height: 10),
-    TextField(controller: goal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Ödül için gereken damga sayısı (1–100)')),
+    TextField(controller: goal, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Toplam damga sayısı (1–100)')),
+    TextField(controller: firstJoinBonus, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'İlk katılıma özel hediye damga (0 = yok)')),
     const SizedBox(height: 10),
     TextField(controller: rewardTitle, decoration: const InputDecoration(labelText: 'Ödül adı', hintText: 'Örn. Ücretsiz kahve')),
     const SizedBox(height: 10),
