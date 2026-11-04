@@ -96,6 +96,16 @@ void main() {
     expect(summary.stampsByCampaign['Tatlı'], 4);
   });
 
+  test('campaign relation handles object and list responses without losing the campaign id', () {
+    final object = campaignRelationMap({'id': 'campaign-123', 'stamps_required': 5});
+    final list = campaignRelationMap([{'id': 'campaign-456', 'stamps_required': 5}]);
+    expect(object?['id'], 'campaign-123');
+    expect(object?['stamps_required'], 5);
+    expect(list?['id'], 'campaign-456');
+    expect(campaignRelationMap(null), isNull);
+    expect(campaignRelationMap([]), isNull);
+  });
+
   test('Cafe Dünyam QR payload accepts only 256-bit lowercase hex tokens', () {
     final token = List.filled(64, 'a').join();
     expect(cafeQrTokenFromPayload('CDQR:' + token), token);
