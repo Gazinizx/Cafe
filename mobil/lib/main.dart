@@ -1248,7 +1248,7 @@ class CampaignCardDetail extends StatefulWidget {
 }
 class _CampaignCardDetailState extends State<CampaignCardDetail> {
   bool _scanning = false, _loading = true, _claiming = false;
-  int _stamps = 0;
+  int _stamps = 0, _bonusStampsAwarded = 0;
   Map<String,dynamic>? _issuedClaim;
   List<Map<String,dynamic>> _history = [];
 
@@ -1271,7 +1271,7 @@ class _CampaignCardDetailState extends State<CampaignCardDetail> {
       if (!LocalData._uuid(campaignId)) {
         throw StateError('Kampanya kimliği eksik. Kampanyalar ekranından kartı yeniden ekle.');
       }
-      final membership = await cloud.from('campaign_memberships').select('stamps')
+      final membership = await cloud.from('campaign_memberships').select('stamps,bonus_stamps_awarded')
         .eq('customer_id', customerId).eq('campaign_id', campaignId).maybeSingle();
       final claim = await cloud.from('reward_claims').select('id,redemption_code,status,reward_snapshot')
         .eq('customer_id', customerId).eq('campaign_id', campaignId).eq('status', 'issued').maybeSingle();
@@ -1281,6 +1281,7 @@ class _CampaignCardDetailState extends State<CampaignCardDetail> {
       if (!mounted) return;
       setState(() {
         _stamps = (membership?['stamps'] as num?)?.toInt() ?? 0;
+        _bonusStampsAwarded = (membership?['bonus_stamps_awarded'] as num?)?.toInt() ?? 0;
         _issuedClaim = claim == null ? null : Map<String,dynamic>.from(claim);
         _history = (events as List).map((e) => Map<String,dynamic>.from(e as Map)).toList();
         _loading = false;
@@ -1422,6 +1423,8 @@ class _CampaignCardDetailState extends State<CampaignCardDetail> {
             Text('$_stamps / $_goal damga', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
           ]),
         ),
+        if (_bonusStampsAwarded > 0)
+          Padding(padding: const EdgeInsets.only(top: 10), child: Text('Kampanyaya ilk katılım hediyesi: +$_bonusStampsAwarded damga', style: const TextStyle(color: forest, fontWeight: FontWeight.w700))),
         if ((widget.campaign['benefit'] ?? '').toString().isNotEmpty)
           Padding(padding: const EdgeInsets.only(top: 14), child: Text(widget.campaign['benefit'].toString())),
         if ((widget.campaign['reward_description'] ?? '').toString().isNotEmpty)
