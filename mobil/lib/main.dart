@@ -155,6 +155,14 @@ const cafesKey = 'cd_local_cafes_v1';
 const dealsKey = 'cd_local_deals_v1';
 const stampsKey = 'cd_local_stamps_v1';
 const businessOrdersKey = 'cd_local_business_orders_v1';
+Map<String,dynamic>? campaignRelationMap(dynamic value) {
+  if (value is Map) return Map<String,dynamic>.from(value);
+  if (value is List && value.isNotEmpty && value.first is Map) {
+    return Map<String,dynamic>.from(value.first as Map);
+  }
+  return null;
+}
+
 
 class CafeLogo extends StatelessWidget {
   final double size;
@@ -412,7 +420,10 @@ class LocalData {
     return (rows as List).map((raw) {
       final row = Map<String,dynamic>.from(raw as Map);
       final campaignRaw = row['campaigns'];
-      final campaign = campaignRaw is Map ? Map<String,dynamic>.from(campaignRaw) : <String,dynamic>{};
+      final campaign = campaignRelationMap(campaignRaw);
+      if (campaign == null || !_uuid(campaign['id']?.toString())) {
+        throw StateError('Kampanyanın bilgileri okunamadı. Katıldığın kampanyaya erişim iznini kontrol et.');
+      }
       final cafeRaw = campaign['cafes'];
       final cafe = cafeRaw is Map ? Map<String,dynamic>.from(cafeRaw) : <String,dynamic>{};
       campaign['businessName'] = cafe['name'] ?? 'İşletme';
@@ -1240,7 +1251,7 @@ class _CampaignCardDetailState extends State<CampaignCardDetail> {
   Map<String,dynamic>? _issuedClaim;
   List<Map<String,dynamic>> _history = [];
 
-  String get _campaignId => widget.campaign['id'].toString();
+  String get _campaignId => widget.campaign['id']?.toString() ?? '';
   int get _goal => (widget.campaign['stamps_required'] as num?)?.toInt() ?? 8;
   bool get _campaignActive {
     if (widget.campaign['is_active'] != true) return false;
@@ -1255,12 +1266,16 @@ class _CampaignCardDetailState extends State<CampaignCardDetail> {
   Future<void> _load() async {
     try {
       final customerId = cloud.auth.currentUser!.id;
+      final campaignId = _campaignId;
+      if (!LocalData._uuid(campaignId)) {
+        throw StateError('Kampanya kimliği eksik. Kampanyalar ekranından kartı yeniden ekle.');
+      }
       final membership = await cloud.from('campaign_memberships').select('stamps')
-        .eq('customer_id', customerId).eq('campaign_id', _campaignId).maybeSingle();
+        .eq('customer_id', customerId).eq('campaign_id', campaignId).maybeSingle();
       final claim = await cloud.from('reward_claims').select('id,redemption_code,status,reward_snapshot')
-        .eq('customer_id', customerId).eq('campaign_id', _campaignId).eq('status', 'issued').maybeSingle();
+        .eq('customer_id', customerId).eq('campaign_id', campaignId).eq('status', 'issued').maybeSingle();
       final events = await cloud.from('campaign_stamp_events').select('id,created_at,cafes(name)')
-        .eq('customer_id', customerId).eq('campaign_id', _campaignId)
+        .eq('customer_id', customerId).eq('campaign_id', campaignId)
         .order('created_at', ascending: false).limit(30);
       if (!mounted) return;
       setState(() {
