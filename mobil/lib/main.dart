@@ -2247,7 +2247,7 @@ class BusinessDeals extends StatefulWidget {
 }
 class _BusinessDealsState extends State<BusinessDeals> {
   final title = TextEditingController(), benefit = TextEditingController();
-  final goal = TextEditingController(text: '8');
+  final goal = TextEditingController();
   final firstJoinBonus = TextEditingController(text: '0');
   final rewardTitle = TextEditingController();
   final rewardDescription = TextEditingController();
@@ -2338,7 +2338,7 @@ class _BusinessDealsState extends State<BusinessDeals> {
       if (imageUrl != null) {
         await cloud.from('campaigns').update({'background_image_url': imageUrl}).eq('id', campaignId);
       }
-      title.clear(); benefit.clear(); goal.text = '8'; firstJoinBonus.text = '0'; rewardTitle.clear(); rewardDescription.clear();
+      title.clear(); benefit.clear(); goal.clear(); firstJoinBonus.text = '0'; rewardTitle.clear(); rewardDescription.clear();
       if (mounted) setState(() { _backgroundImage = null; _endsAt = null; stampIcon = 'coffee'; });
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Sadakat kampanyası oluşturuldu.')));
     } catch (error) { _reportSyncError(error); }
